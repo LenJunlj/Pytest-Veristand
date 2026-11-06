@@ -7,6 +7,8 @@
   （RES2 / HU_DrvSeatHeat / FIU 等），bench.yaml 当前刻意清空 —— 未配置时自动 skip，
   等 hil 安全确认后再启用，无需改本文件。
 """
+import time
+
 import pytest
 
 pytestmark = pytest.mark.hil
@@ -38,6 +40,7 @@ def test_state_isolated_a(channel, bench_config):
         pytest.skip("reset_channels 为空（只读阶段）——配好真实激励通道后再验证写入")
     name, safe = probe
     channel.set(name, safe + 1.0)          # 偏离量按通道值域自行调整
+    time.sleep(0.5)                        # 模型参数经模型周期异步生效（实测 <0.3s）
     assert abs(channel.get(name) - (safe + 1.0)) < 1e-6
 
 

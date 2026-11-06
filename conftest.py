@@ -79,27 +79,39 @@ def veristand(bench_config, bench_lock):
     yield ws
     if connected:
         try:
-            ws.disconnect_from_system()
+            ws.disconnect_from_system("", False)   # 不 undeploy，系统留给台架
         except Exception as e:
             print(f"[veristand] 断开时出现异常（不掩盖测试结果）: {e}")
 
 
+@pytest.fixture(scope="session")
+def model_manager(bench_config):
+    """模型参数读写接口 —— 激励写入的唯一正确通道（实证：Parameters 通道层只读，
+    TestStand 存量等价机制即 ModelManager 参数 API；见 helpers/channel.py 头注）。"""
+    from niveristand.clientapi import Factory
+    return Factory().get_imodel_manager2(
+        bench_config["veristand"].get("gateway", "localhost"))
+
+
 @pytest.fixture
-def vs(veristand, bench_config):
+def vs(veristand, bench_config, model_manager):
     """function 级：用例前 + 用例后都把 reset_channels 压回安全状态。
 
     两侧都执行是刻意的：setup 侧保证上一条用例（或手工操作）的残留被清掉，
     teardown 侧保证本条用例的注入不泄漏给下一条。故障注入通道加进 reset_channels 即可。
     """
     vc = bench_config["veristand"]
-    prefix = vc.get("channel_prefix", "Aliases/")
+    helper = ChannelHelper(veristand, vc.get("channel_prefix", "Aliases/"),
+                           model_manager=model_manager,
+                           target=vc.get("model_target", "Controller"))
 
     def apply_resets():
+        # 走 ChannelHelper：反斜杠全路径自动转正斜杠 + 前缀规则单一来源
         for name, value in vc.get("reset_channels", {}).items():
             try:
-                veristand.set_single_channel_value(prefix + name, float(value))
+                helper.set(name, value)
             except Exception as e:
-                print(f"[vs] 复位 {name} 失败（别名缺失？）: {e}")
+                print(f"[vs] 复位 {name} 失败: {e}")
 
     apply_resets()
     yield veristand
@@ -107,6 +119,10 @@ def vs(veristand, bench_config):
 
 
 @pytest.fixture
-def channel(vs, bench_config):
-    """便捷读写通道；稳态等待用 channel.wait_near(...)。"""
-    return ChannelHelper(vs, bench_config["veristand"].get("channel_prefix", "Aliases/"))
+def channel(vs, bench_config, model_manager):
+    """便捷读写通道；稳态等待用 channel.wait_near(...)。
+    模型参数路径的 set 自动走 ModelManager 参数 API（见 ChannelHelper）。"""
+    vc = bench_config["veristand"]
+    return ChannelHelper(vs, vc.get("channel_prefix", "Aliases/"),
+                         model_manager=model_manager,
+                         target=vc.get("model_target", "Controller"))

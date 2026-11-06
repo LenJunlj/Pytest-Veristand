@@ -8,12 +8,17 @@ veristand:
                               # deploy=完整部署（CI 夜间回归用）
   deploy_timeout_ms: 120000
   channel_prefix: "Aliases/"
+  model_target: "Controller"   # 模型所在目标名（ModelManager 参数 API 用，如 Controller）
   # 每个用例前后强制复位的安全状态（通道全路径: 值；function 级 fixture 两侧都会执行，防状态泄漏）
-  # 只读验证阶段刻意清空 —— 不写任何通道。hil 安全确认后再配真实激励通道，例如：
-  #   "Targets\\Controller\\...\\HU_DrvSeatHeat\\Value": 0.0     # 加热请求 OFF
-  #   "Targets\\...\\RES2\\Value": 10000.0                        # NTC 阻值
-  #   "Targets\\...\\FIU3_OUT_Channel9\\Value": 0.0               # 故障注入取消
-  reset_channels: {}
+  # 只放"用例级激励"通道；电源/IGN/KeyState 等 bench 工况由 Stimulus.bench_ready/shutdown 管理
+  # （通道与值域照抄 helpers/stimulus.py；HIL 安全确认 2026-11-06 已通过）
+  reset_channels:
+    'Targets\Controller\Simulation Models\Models\TongYu_IO\Parameters\IO\CAN IO Model\CAN BUS\MDLSoftECUDataToBus\HU_SEATSET_3F4_Msg\HU_DrvSeatHeat\Value': 0.0      # 加热请求 OFF
+    'Targets\Controller\Simulation Models\Models\TongYu_IO\Parameters\IO\HardLine IO Model\MDLDataToController\MDLSignalRouting\RES2\Value': 6500.0                    # NTC 常温中值
+    'Targets\Controller\Simulation Models\Models\TongYu_IO\Parameters\IO\HardLine IO Model\MDLDataToController\MDLSignalRouting\DO0\Value': 0.0                        # 加热开关松开
+    'Targets\Controller\Simulation Models\Models\TongYu_IO\Parameters\IO\FIU\FIU3_OUT_Channel9\Value': 0.0                                                            # NTC 故障注入取消
+    'Targets\Controller\Simulation Models\Models\TongYu_IO\Parameters\IO\FIU\FIU3_OUT_Channel7\Value': 0.0                                                            # 同上（存量双通道并存，都清）
+    'Targets\Controller\Simulation Models\Models\TongYu_IO\Parameters\IO\FIU\FIU1OUT_Channel1\Value': 0.0                                                             # 输出故障注入取消
 
 lock:
   path: "C:/HIL/bench.lock"   # 台架全局锁文件：本机所有使用者 + CI 必须指向同一个文件
