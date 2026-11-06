@@ -24,3 +24,11 @@ lock:
   path: "C:/HIL/bench.lock"   # 台架全局锁文件：本机所有使用者 + CI 必须指向同一个文件
   stale_after_s: 43200        # 超过 12h 视为陈锁，自动清理（防死锁）
   on_busy: "fail"             # fail=拿不到锁直接失败 / skip=跳过 hil 用例（CI 可选）
+
+report:
+  # Allure：pytest 传了 --alluredir 时，会话结束自动执行 allure generate
+  allure:
+    enabled: true
+    bin: "C:/Tools/allure-2.29.0/bin/allure.bat"   # Allure CLI（Maven Central 下载，需 Java）
+    java_home: "C:/Tools/jdk-17.0.2"                # 未设置系统 JAVA_HOME 时用这个
+    outdir: "allure-report"                          # 相对仓库根

@@ -5,6 +5,8 @@
   function 级：vs / channel（每个用例前后把关键通道压回安全状态，防状态泄漏）
 """
 import os
+import shutil
+import subprocess
 import sys
 
 import pytest
@@ -26,11 +28,15 @@ os.makedirs(os.path.join(_REPO_ROOT, "reports"), exist_ok=True)
 
 
 def pytest_configure(config):
-    """把 ini 里相对路径的 --junitxml 锚定到仓库根（默认相对 cwd，PyCharm 会写到 tests\reports）。
+    """把相对路径输出锚定到仓库根（默认相对 cwd，PyCharm 右键运行时会写到 tests\ 下）。
     注意 --junitxml 的 dest 是 xmlpath（pytest 5.x/8.x 相同）。"""
     xml = getattr(config.option, "xmlpath", None)
     if xml and not os.path.isabs(xml):
         config.option.xmlpath = os.path.join(_REPO_ROOT, xml)
+    # allure-pytest 的 --alluredir 实际 dest 是 allure_report_dir（2.9.x/2.13.x 一致）
+    alluredir = getattr(config.option, "allure_report_dir", None)
+    if alluredir and not os.path.isabs(alluredir):
+        config.option.allure_report_dir = os.path.join(_REPO_ROOT, alluredir)
 
 
 def pytest_addoption(parser):
@@ -41,10 +47,14 @@ def pytest_addoption(parser):
 
 
 def pytest_terminal_summary(terminalreporter, exitstatus, config):
-    """会话结束（junit.xml 已写出）后自动生成 HTML 报告。
+    """会话结束后自动生成报告（TestStand 风格 HTML + Allure）。
     报告失败只打印提示，绝不影响测试结果与退出码。"""
-    if config.getoption("--no-report"):
-        return
+    if not config.getoption("--no-report"):
+        _generate_teststand_report(terminalreporter, config)
+    _generate_allure_report(terminalreporter, config)
+
+
+def _generate_teststand_report(terminalreporter, config):
     xml = getattr(config.option, "xmlpath", None)
     if not xml or not os.path.exists(xml):
         return
@@ -54,6 +64,50 @@ def pytest_terminal_summary(terminalreporter, exitstatus, config):
         terminalreporter.write_line("[report] HTML 报告: %s" % path)
     except Exception as e:                      # noqa: BLE001 —— 报告不允许污染测试结论
         terminalreporter.write_line("[report] 生成失败（不影响测试结果）: %s" % e)
+
+
+def _generate_allure_report(terminalreporter, config):
+    """仅当本次传了 --alluredir 时，会话结束自动执行 allure generate（配置见 bench.yaml report.allure）。"""
+    alluredir = getattr(config.option, "allure_report_dir", None)
+    if not alluredir:
+        return
+    if not (os.path.isdir(alluredir)
+            and any(f.endswith(".json") for f in os.listdir(alluredir))):
+        return
+    cfg = {}
+    try:
+        with open(BENCH_CONFIG_PATH, "r", encoding="utf-8") as f:
+            cfg = ((yaml.safe_load(f) or {}).get("report", {}) or {}).get("allure", {}) or {}
+    except Exception:
+        pass
+    if cfg.get("enabled", True) is False:
+        return
+
+    allure_bin = cfg.get("bin") or shutil.which("allure")
+    if not allure_bin or not os.path.exists(allure_bin):
+        terminalreporter.write_line("[allure] 未找到 allure CLI（配置 bench.yaml report.allure.bin）")
+        return
+    outdir = cfg.get("outdir", "allure-report")
+    if not os.path.isabs(outdir):
+        outdir = os.path.join(_REPO_ROOT, outdir)
+    java_home = os.environ.get("JAVA_HOME") or cfg.get("java_home")
+    if not java_home or not os.path.isdir(java_home):
+        terminalreporter.write_line("[allure] 未找到 Java（设置 JAVA_HOME 或 bench.yaml report.allure.java_home）")
+        return
+
+    env = dict(os.environ)
+    env["JAVA_HOME"] = java_home
+    try:
+        r = subprocess.run(
+            ["cmd", "/c", allure_bin, "generate", alluredir, "-o", outdir, "--clean"],
+            env=env, capture_output=True, text=True, timeout=300)
+        if r.returncode == 0:
+            terminalreporter.write_line("[allure] 报告: %s" % os.path.join(outdir, "index.html"))
+        else:
+            terminalreporter.write_line(
+                "[allure] 生成失败（不影响测试结果）: %s" % (r.stderr or r.stdout)[-300:])
+    except Exception as e:                      # noqa: BLE001
+        terminalreporter.write_line("[allure] 生成异常（不影响测试结果）: %s" % e)
 
 
 @pytest.fixture(scope="session")
