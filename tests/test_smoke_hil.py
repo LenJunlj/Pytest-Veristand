@@ -13,8 +13,8 @@ import pytest
 
 pytestmark = pytest.mark.hil
 
-# 读探针：台架真实通道（照抄存量序列；含 \ 的名字 ChannelHelper 直接透传，不加前缀）
-READ_PROBE = r"Targets\Controller\Hardware\Chassis\DAQ\Dev1\Digital Input\port0\DI1"
+# 读探针：台架真实通道（存量 .seq 误写 DI1，实测 DI0 为加热硬线输出，用户已确认）
+READ_PROBE = r"Targets\Controller\Hardware\Chassis\DAQ\Dev1\Digital Input\port0\DI0"
 
 
 def _reset_probe(bench_config):

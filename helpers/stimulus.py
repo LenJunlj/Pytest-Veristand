@@ -31,7 +31,8 @@ CH_FIU3_CH7 = _IO + r"\FIU\FIU3_OUT_Channel7\Value"      # NTC 故障注入（�
 CH_FIU1_CH1 = _IO + r"\FIU\FIU1OUT_Channel1\Value"       # 加热输出故障注入
 
 # ---- 读通道 ----
-CH_HEAT_OUT_HARD = r"Targets\Controller\Hardware\Chassis\DAQ\Dev1\Digital Input\port0\DI1"
+# 存量 .seq 误写为 DI1（恒 0）；实测 DI0 随加热请求 0→1 响应，2026-11-06 用户确认
+CH_HEAT_OUT_HARD = r"Targets\Controller\Hardware\Chassis\DAQ\Dev1\Digital Input\port0\DI0"
 CH_HEAT_OUT_CAN = (r"Targets\Controller\Hardware\Chassis\NI-XNET\CAN\ECU\Incoming"
                    r"\Single-Point\SEAT_DrvStd (993)\IndicatorDrvSeatHeat")
 
