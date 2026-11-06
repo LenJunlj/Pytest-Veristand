@@ -9,9 +9,11 @@ class ChannelHelper:
         self._prefix = prefix
 
     def _full(self, name):
-        # 实证（P2546 样本）：台架通道用模型全路径寻址（Targets\...\Value，含 \ 或 /），
-        # 只有短名（别名）才需要加前缀。全路径直接透传。
-        if "/" in name or "\\" in name or not self._prefix:
+        # 实证（P2546 台架，niveristand 4.0.0 + VS2020 Gateway）：
+        # 1) 通道用模型全路径寻址（Targets/...），只有短名（别名）才需要加前缀；
+        # 2) API 只认正斜杠 —— 存量 .seq 照抄来的反斜杠形式必须转换，否则报 220002。
+        name = name.replace("\\", "/")
+        if "/" in name or not self._prefix:
             return name
         return name if name.startswith(self._prefix) else self._prefix + name
 

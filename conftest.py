@@ -51,18 +51,37 @@ def veristand(bench_config, bench_lock):
 
     mode=attach  附加到已部署系统（白天人工调试的安全默认，不会踢掉别人的会话）
     mode=deploy  完整部署系统定义（CI 夜间回归用；会独占台架——但我们持有锁）
+
+    实证（P2546 台架，niveristand 4.0.0 + VS2020）：前台 VeriStand 已部署时
+    connect_to_system 反而失败（ERunConfiguration 3090002）。attach 的正确姿势是
+    先 get_system_state 探测：已有活动系统且路径匹配 → 直接复用，不 connect；
+    否则才 connect_to_system（deploy=False 附加 / deploy=True 部署）。
     """
     cfg = bench_config["veristand"]
-    from niveristand.clientapi import Factory   # 延迟导入：纯单元测试不需要装 VeriStand
+    from niveristand.clientapi import Factory, SystemState   # 延迟导入：纯单元测试不需要装 VeriStand
     ws = Factory().get_iworkspace2()
     deploy = str(cfg.get("mode", "attach")).lower() == "deploy"
+    connected = False
+    if not deploy:
+        try:
+            state, active_sdf, _targets = ws.get_system_state()
+            want = os.path.normcase(os.path.normpath(cfg["system_definition"]))
+            have = os.path.normcase(os.path.normpath(active_sdf)) if active_sdf else ""
+            if state == SystemState.ACTIVE and want == have:
+                print(f"[veristand] 附加到已运行系统: {active_sdf}")
+                yield ws
+                return                     # 复用会话，不做 disconnect（不是我们连接的）
+        except Exception as e:
+            print(f"[veristand] 探测活动系统失败，回退 connect_to_system: {e}")
     ws.connect_to_system(
         cfg["system_definition"], deploy, int(cfg.get("deploy_timeout_ms", 120000)))
+    connected = True
     yield ws
-    try:
-        ws.disconnect_from_system()
-    except Exception as e:
-        print(f"[veristand] 断开时出现异常（不掩盖测试结果）: {e}")
+    if connected:
+        try:
+            ws.disconnect_from_system()
+        except Exception as e:
+            print(f"[veristand] 断开时出现异常（不掩盖测试结果）: {e}")
 
 
 @pytest.fixture

@@ -3,15 +3,17 @@
 
 veristand:
   gateway: "localhost"        # 远程 Gateway 支持待验证（P1 清单项），当前按台架本机运行
-  system_definition: "F:/HIL/SystemDefs/engine.nivssdf"   # ← 改成真实路径
+  system_definition: "E:/P2546/Veristand项目/p2546.nivssdf"   # 台架真实系统定义（attach 到已部署系统）
   mode: "attach"              # attach=附加到已部署系统（安全默认，白天人工用）
                               # deploy=完整部署（CI 夜间回归用）
   deploy_timeout_ms: 120000
   channel_prefix: "Aliases/"
-  # 每个用例前后强制复位的安全状态（别名: 值）
-  # 故障注入类通道也加在这里，function 级 fixture 两侧都会执行，防状态泄漏
-  reset_channels:
-    DesiredRPM: 0.0           # ← 按你的系统定义增删
+  # 每个用例前后强制复位的安全状态（通道全路径: 值；function 级 fixture 两侧都会执行，防状态泄漏）
+  # 只读验证阶段刻意清空 —— 不写任何通道。hil 安全确认后再配真实激励通道，例如：
+  #   "Targets\\Controller\\...\\HU_DrvSeatHeat\\Value": 0.0     # 加热请求 OFF
+  #   "Targets\\...\\RES2\\Value": 10000.0                        # NTC 阻值
+  #   "Targets\\...\\FIU3_OUT_Channel9\\Value": 0.0               # 故障注入取消
+  reset_channels: {}
 
 lock:
   path: "C:/HIL/bench.lock"   # 台架全局锁文件：本机所有使用者 + CI 必须指向同一个文件
