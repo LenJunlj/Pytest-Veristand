@@ -1,0 +1,9 @@
+# 台架机独立 venv 安装（Python 3.9.13 x64，与已验证环境一致）
+pythonnet>=3.0,<4
+niveristand==4.0.0
+pytest>=7.4
+PyYAML>=6.0
+
+# 注意：如果 niveristand==4.0.0 从 PyPI 装不上（说明台架上是 TongYuTestScript
+# 环境里的私有/预装包），把那个 wheel 拷进本仓库 wheels/ 目录，改成：
+#   ./wheels/niveristand-4.0.0-py3-none-any.whl

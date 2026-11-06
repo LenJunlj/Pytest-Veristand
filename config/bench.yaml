@@ -1,0 +1,19 @@
+# 台架配置 —— 所有环境相关的东西只改这里，不改代码
+# 也可以用环境变量 HIL_BENCH_CONFIG 指向另一份配置（多台架时用）
+
+veristand:
+  gateway: "localhost"        # 远程 Gateway 支持待验证（P1 清单项），当前按台架本机运行
+  system_definition: "F:/HIL/SystemDefs/engine.nivssdf"   # ← 改成真实路径
+  mode: "attach"              # attach=附加到已部署系统（安全默认，白天人工用）
+                              # deploy=完整部署（CI 夜间回归用）
+  deploy_timeout_ms: 120000
+  channel_prefix: "Aliases/"
+  # 每个用例前后强制复位的安全状态（别名: 值）
+  # 故障注入类通道也加在这里，function 级 fixture 两侧都会执行，防状态泄漏
+  reset_channels:
+    DesiredRPM: 0.0           # ← 按你的系统定义增删
+
+lock:
+  path: "C:/HIL/bench.lock"   # 台架全局锁文件：本机所有使用者 + CI 必须指向同一个文件
+  stale_after_s: 43200        # 超过 12h 视为陈锁，自动清理（防死锁）
+  on_busy: "fail"             # fail=拿不到锁直接失败 / skip=跳过 hil 用例（CI 可选）

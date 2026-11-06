@@ -1,0 +1,93 @@
+﻿序列文件,类别,名称,偏移,迁移建议,状态
+P2546_左后大屏加热.seq,前提/退出条件,前提条件测试-NTC开路,0x97476,公共前置/后置：fixture 或 helper 函数,待翻译
+P2546_左后大屏加热.seq,前提/退出条件,前提条件测试-NTC短地,0x97414,公共前置/后置：fixture 或 helper 函数,待翻译
+P2546_左后大屏加热.seq,前提/退出条件,前提条件测试-NTC短电源,0x97444,公共前置/后置：fixture 或 helper 函数,待翻译
+P2546_左后大屏加热.seq,前提/退出条件,前提条件测试-加热输出开路,0x9756d,公共前置/后置：fixture 或 helper 函数,待翻译
+P2546_左后大屏加热.seq,前提/退出条件,前提条件测试-加热输出短地,0x97538,公共前置/后置：fixture 或 helper 函数,待翻译
+P2546_左后大屏加热.seq,前提/退出条件,前提条件测试-点火开关ACC挡,0x972c7,公共前置/后置：fixture 或 helper 函数,待翻译
+P2546_左后大屏加热.seq,前提/退出条件,前提条件测试-点火开关Crank+IG挡,0x972fd,公共前置/后置：fixture 或 helper 函数,待翻译
+P2546_左后大屏加热.seq,前提/退出条件,前提条件测试-点火开关Error挡,0x97338,公共前置/后置：fixture 或 helper 函数,待翻译
+P2546_左后大屏加热.seq,前提/退出条件,前提条件测试-点火开关OFF挡,0x97291,公共前置/后置：fixture 或 helper 函数,待翻译
+P2546_左后大屏加热.seq,前提/退出条件,前提条件测试_发动机状态Crank,0x97175,公共前置/后置：fixture 或 helper 函数,待翻译
+P2546_左后大屏加热.seq,前提/退出条件,前提条件测试_发动机状态Fault,0x971ad,公共前置/后置：fixture 或 helper 函数,待翻译
+P2546_左后大屏加热.seq,前提/退出条件,前提条件测试_发动机状态NoRunning,0x97139,公共前置/后置：fixture 或 helper 函数,待翻译
+P2546_左后大屏加热.seq,前提/退出条件,前提条件测试_整车碰撞,0x970d7,公共前置/后置：fixture 或 helper 函数,待翻译
+P2546_左后大屏加热.seq,前提/退出条件,前提条件测试_欠压,0x97023,公共前置/后置：fixture 或 helper 函数,待翻译
+P2546_左后大屏加热.seq,前提/退出条件,前提条件测试_过压,0x97050,公共前置/后置：fixture 或 helper 函数,待翻译
+P2546_左后大屏加热.seq,前提/退出条件,退出条件测试-NTC开路,0x97508,公共前置/后置：fixture 或 helper 函数,待翻译
+P2546_左后大屏加热.seq,前提/退出条件,退出条件测试-NTC短地,0x974a6,公共前置/后置：fixture 或 helper 函数,待翻译
+P2546_左后大屏加热.seq,前提/退出条件,退出条件测试-NTC短电源,0x974d6,公共前置/后置：fixture 或 helper 函数,待翻译
+P2546_左后大屏加热.seq,前提/退出条件,退出条件测试-加热输出开路,0x975dc,公共前置/后置：fixture 或 helper 函数,待翻译
+P2546_左后大屏加热.seq,前提/退出条件,退出条件测试-加热输出短地,0x975a7,公共前置/后置：fixture 或 helper 函数,待翻译
+P2546_左后大屏加热.seq,前提/退出条件,退出条件测试-点火开关ACC挡,0x973a6,公共前置/后置：fixture 或 helper 函数,待翻译
+P2546_左后大屏加热.seq,前提/退出条件,退出条件测试-点火开关Error挡,0x973dc,公共前置/后置：fixture 或 helper 函数,待翻译
+P2546_左后大屏加热.seq,前提/退出条件,退出条件测试-点火开关OFF挡,0x97370,公共前置/后置：fixture 或 helper 函数,待翻译
+P2546_左后大屏加热.seq,前提/退出条件,退出条件测试_发动机状态Fault,0x97259,公共前置/后置：fixture 或 helper 函数,待翻译
+P2546_左后大屏加热.seq,前提/退出条件,退出条件测试_发动机状态NoRunning,0x971e5,公共前置/后置：fixture 或 helper 函数,待翻译
+P2546_左后大屏加热.seq,前提/退出条件,退出条件测试_整车碰撞,0x97108,公共前置/后置：fixture 或 helper 函数,待翻译
+P2546_左后大屏加热.seq,前提/退出条件,退出条件测试_欠压,0x9707d,公共前置/后置：fixture 或 helper 函数,待翻译
+P2546_左后大屏加热.seq,前提/退出条件,退出条件测试_过压,0x970aa,公共前置/后置：fixture 或 helper 函数,待翻译
+P2546_左后大屏加热.seq,触发条件,触发条件测试-加热OFF,0x976a4,测试用例 test_（按档位/工况 parametrize）,待翻译
+P2546_左后大屏加热.seq,触发条件,触发条件测试-加热一档,0x97673,测试用例 test_（按档位/工况 parametrize）,待翻译
+P2546_左后大屏加热.seq,触发条件,触发条件测试-加热三档,0x97611,测试用例 test_（按档位/工况 parametrize）,待翻译
+P2546_左后大屏加热.seq,触发条件,触发条件测试-加热二档,0x97642,测试用例 test_（按档位/工况 parametrize）,待翻译
+P2546_左后大屏加热.seq,控温逻辑,加热控温逻辑测试-加热一档,0x9773e,测试用例 test_（按档位 parametrize）,待翻译
+P2546_左后大屏加热.seq,控温逻辑,加热控温逻辑测试-加热三档,0x976d4,测试用例 test_（按档位 parametrize）,待翻译
+P2546_左后大屏加热.seq,控温逻辑,加热控温逻辑测试-加热二档,0x97709,测试用例 test_（按档位 parametrize）,待翻译
+P2546_左后大屏加热.seq,故障恢复,故障恢复测试-NTC开路故障,0x977a7,测试用例 test_（注入→断言→强制清除）,待翻译
+P2546_左后大屏加热.seq,故障恢复,故障恢复测试-NTC短地故障,0x97773,测试用例 test_（注入→断言→强制清除）,待翻译
+P2546_左后大屏加热.seq,故障恢复,故障恢复测试-欠压故障,0x97845,测试用例 test_（注入→断言→强制清除）,待翻译
+P2546_左后大屏加热.seq,故障恢复,故障恢复测试-输出开路故障,0x97810,测试用例 test_（注入→断言→强制清除）,待翻译
+P2546_左后大屏加热.seq,故障恢复,故障恢复测试-输出短地故障,0x977db,测试用例 test_（注入→断言→强制清除）,待翻译
+P2546_左后大屏加热.seq,故障恢复,故障恢复测试-过压故障,0x97876,测试用例 test_（注入→断言→强制清除）,待翻译
+P2546_左后大屏加热.seq,动作步骤,取消NTC开路,0x9f2f1,helpers/stimulus.py 封装函数,待翻译
+P2546_左后大屏加热.seq,动作步骤,取消NTC故障,0xa0ca6,helpers/stimulus.py 封装函数,待翻译
+P2546_左后大屏加热.seq,动作步骤,取消NTC短地,0x9f0f2,helpers/stimulus.py 封装函数,待翻译
+P2546_左后大屏加热.seq,动作步骤,取消加热输出开路,0x9f6a9,helpers/stimulus.py 封装函数,待翻译
+P2546_左后大屏加热.seq,动作步骤,取消加热输出故障,0xa0ccd,helpers/stimulus.py 封装函数,待翻译
+P2546_左后大屏加热.seq,动作步骤,取消加热输出短地,0x9f4e8,helpers/stimulus.py 封装函数,待翻译
+P2546_左后大屏加热.seq,动作步骤,设置IGN,0xa0c16,helpers/stimulus.py 封装函数,待翻译
+P2546_左后大屏加热.seq,动作步骤,设置NTC开路,0x9d444,helpers/stimulus.py 封装函数,待翻译
+P2546_左后大屏加热.seq,动作步骤,设置NTC短地,0x9d04c,helpers/stimulus.py 封装函数,待翻译
+P2546_左后大屏加热.seq,动作步骤,设置NTC短电源,0x9d2a1,helpers/stimulus.py 封装函数,待翻译
+P2546_左后大屏加热.seq,动作步骤,设置加热输出开路,0x9df62,helpers/stimulus.py 封装函数,待翻译
+P2546_左后大屏加热.seq,动作步骤,设置加热输出短地,0x9dd18,helpers/stimulus.py 封装函数,待翻译
+P2546_左后大屏加热.seq,动作步骤,设置发动机状态Running,0x9b632,helpers/stimulus.py 封装函数,待翻译
+P2546_左后大屏加热.seq,动作步骤,设置左后加热NTC阻值5.5kΩ,0x9eb06,helpers/stimulus.py 封装函数,待翻译
+P2546_左后大屏加热.seq,动作步骤,设置左后加热NTC阻值6.5kΩ,0x9ed25,helpers/stimulus.py 封装函数,待翻译
+P2546_左后大屏加热.seq,动作步骤,设置左后加热NTC阻值7.5kΩ,0x9eebe,helpers/stimulus.py 封装函数,待翻译
+P2546_左后大屏加热.seq,动作步骤,设置整车无碰撞,0xa0c7c,helpers/stimulus.py 封装函数,待翻译
+P2546_左后大屏加热.seq,动作步骤,设置整车碰撞,0x9b1cb,helpers/stimulus.py 封装函数,待翻译
+P2546_左后大屏加热.seq,动作步骤,设置电源模式,0xa0c39,helpers/stimulus.py 封装函数,待翻译
+P2546_左后大屏加热.seq,动作步骤,设置电源模式ACC&硬线IGN无效,0x9c4bf,helpers/stimulus.py 封装函数,待翻译
+P2546_左后大屏加热.seq,动作步骤,设置电源模式CRANK+IG&硬线IG有效,0x9c655,helpers/stimulus.py 封装函数,待翻译
+P2546_左后大屏加热.seq,动作步骤,设置电源模式Error&硬线IG无效,0x9c7ef,helpers/stimulus.py 封装函数,待翻译
+P2546_左后大屏加热.seq,动作步骤,设置电源模式OFF&硬线IGN无效,0x9c23f,helpers/stimulus.py 封装函数,待翻译
+P2546_左后大屏加热.seq,动作步骤,设置程控电源13.5V,0x9f8b1,helpers/stimulus.py 封装函数,待翻译
+P2546_左后大屏加热.seq,动作步骤,设置程控电源13.5V/20A/ON,0xa0a8a,helpers/stimulus.py 封装函数,待翻译
+P2546_左后大屏加热.seq,动作步骤,设置程控电源17V,0x9ab93,helpers/stimulus.py 封装函数,待翻译
+P2546_左后大屏加热.seq,动作步骤,设置程控电源8.5V,0x9a98b,helpers/stimulus.py 封装函数,待翻译
+P2546_左后大屏加热.seq,动作步骤,设置程控电源8V,0x9f86a,helpers/stimulus.py 封装函数,待翻译
+P2546_左后大屏加热.seq,动作步骤,设置程控电源继电器,0xa0b85,helpers/stimulus.py 封装函数,待翻译
+P2546_左后大屏加热.seq,通道路径,Targets\Controller\Hardware\Chassis\DAQ\Dev1\Digital Input\port0\DI1,0xa09d0,通道词汇：channel.set/get 直接用全路径,待翻译
+P2546_左后大屏加热.seq,通道路径,Targets\Controller\Hardware\Chassis\NI-XNET\CAN\ECU\Incoming\Single-Point\SEAT_DrvStd (993)\IndicatorDrvSeatHeat,0xa0a15,通道词汇：channel.set/get 直接用全路径,待翻译
+P2546_左后大屏加热.seq,通道路径,Targets\Controller\Simulation Models\Models\TongYu_IO\Parameters\IO\CAN IO Model\CAN BUS\MDLSoftECUDataToBus\BCM_VehSt1_2AB_Msg\KeyState\Value,0x9c276,通道词汇：channel.set/get 直接用全路径,待翻译
+P2546_左后大屏加热.seq,通道路径,Targets\Controller\Simulation Models\Models\TongYu_IO\Parameters\IO\CAN IO Model\CAN BUS\MDLSoftECUDataToBus\HU_SEATSET_3F4_Msg\HU_DrvSeatHeat\Value,0xa02e6,通道词汇：channel.set/get 直接用全路径,待翻译
+P2546_左后大屏加热.seq,通道路径,Targets\Controller\Simulation Models\Models\TongYu_IO\Parameters\IO\CAN IO Model\CAN BUS\MDLSoftECUDataToBus\mrEMS_EngSt1_117_Msg\EngState\Value,0x9b663,通道词汇：channel.set/get 直接用全路径,待翻译
+P2546_左后大屏加热.seq,通道路径,Targets\Controller\Simulation Models\Models\TongYu_IO\Parameters\IO\CAN IO Model\CAN BUS\MDLSoftECUDataToBus\srP_Msg1_20E_Msg\CrashInfo\Value,0x9b1f3,通道词汇：channel.set/get 直接用全路径,待翻译
+P2546_左后大屏加热.seq,通道路径,Targets\Controller\Simulation Models\Models\TongYu_IO\Parameters\IO\FIU\FIU1OUT_Channel10\Value,0x9dd44,通道词汇：channel.set/get 直接用全路径,待翻译
+P2546_左后大屏加热.seq,通道路径,Targets\Controller\Simulation Models\Models\TongYu_IO\Parameters\IO\FIU\FIU1OUT_Channel1\Value,0x9dda4,通道词汇：channel.set/get 直接用全路径,待翻译
+P2546_左后大屏加热.seq,通道路径,Targets\Controller\Simulation Models\Models\TongYu_IO\Parameters\IO\FIU\FIU3_OUT_Channel7\Value,0x9d073,通道词汇：channel.set/get 直接用全路径,待翻译
+P2546_左后大屏加热.seq,通道路径,Targets\Controller\Simulation Models\Models\TongYu_IO\Parameters\IO\FIU\FIU3_OUT_Channel9\Value,0x9f077,通道词汇：channel.set/get 直接用全路径,待翻译
+P2546_左后大屏加热.seq,通道路径,Targets\Controller\Simulation Models\Models\TongYu_IO\Parameters\IO\HardLine IO Model\MDLDataToController\MDLSignalRouting\DO0\Value,0xa053c,通道词汇：channel.set/get 直接用全路径,待翻译
+P2546_左后大屏加热.seq,通道路径,Targets\Controller\Simulation Models\Models\TongYu_IO\Parameters\IO\HardLine IO Model\MDLDataToController\MDLSignalRouting\RES2\Value,0x9eb3b,通道词汇：channel.set/get 直接用全路径,待翻译
+P2546_左后大屏加热.seq,通道路径,Targets\Controller\Simulation Models\Models\TongYu_IO\Parameters\IO\PowerControl\CurrentControl\Value,0xa0abe,通道词汇：channel.set/get 直接用全路径,待翻译
+P2546_左后大屏加热.seq,通道路径,Targets\Controller\Simulation Models\Models\TongYu_IO\Parameters\IO\PowerControl\IGN\Value,0x9c305,通道词汇：channel.set/get 直接用全路径,待翻译
+P2546_左后大屏加热.seq,通道路径,Targets\Controller\Simulation Models\Models\TongYu_IO\Parameters\IO\PowerControl\ON/OFF\Value,0xa0b27,通道词汇：channel.set/get 直接用全路径,待翻译
+P2546_左后大屏加热.seq,通道路径,Targets\Controller\Simulation Models\Models\TongYu_IO\Parameters\IO\PowerControl\Power_Relay\Value,0xa0bb3,通道词汇：channel.set/get 直接用全路径,待翻译
+P2546_左后大屏加热.seq,通道路径,Targets\Controller\Simulation Models\Models\TongYu_IO\Parameters\IO\PowerControl\VlotageControl\Value,0x9a9b7,通道词汇：channel.set/get 直接用全路径,待翻译
+P2546_左后大屏加热.seq,信号/全局变量,HeatOutCAN,0xa0e06,测量通道词汇表（constants/dataclass）,待翻译
+P2546_左后大屏加热.seq,信号/全局变量,HeatOutHard,0xa0e11,测量通道词汇表（constants/dataclass）,待翻译
+P2546_左后大屏加热.seq,信号/全局变量,LEDHeatHigh,0xa0dfa,测量通道词汇表（constants/dataclass）,待翻译
+P2546_左后大屏加热.seq,信号/全局变量,LEDHeatLow,0xa0de4,测量通道词汇表（constants/dataclass）,待翻译
+P2546_左后大屏加热.seq,信号/全局变量,LEDHeatMid,0xa0def,测量通道词汇表（constants/dataclass）,待翻译
