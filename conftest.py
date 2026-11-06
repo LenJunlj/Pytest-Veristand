@@ -15,10 +15,22 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from helpers.bench_lock import BenchLock, LockBusy          # noqa: E402
 from helpers.channel import ChannelHelper                    # noqa: E402
 
-BENCH_CONFIG_PATH = os.environ.get("HIL_BENCH_CONFIG", "config/bench.yaml")
+# 仓库根 = conftest.py 所在目录。所有相对路径锚定到这里，与运行时 cwd 解耦
+# （PyCharm 右键单文件运行时 cwd 是 tests\，不锚定就会找错 config、写歪 reports）
+_REPO_ROOT = os.path.dirname(os.path.abspath(__file__))
+BENCH_CONFIG_PATH = os.environ.get(
+    "HIL_BENCH_CONFIG", os.path.join(_REPO_ROOT, "config", "bench.yaml"))
 
 # junitxml 输出目录预创建（旧版 pytest 不会自动建目录；且不依赖运行时 cwd）
-os.makedirs(os.path.join(os.path.dirname(os.path.abspath(__file__)), "reports"), exist_ok=True)
+os.makedirs(os.path.join(_REPO_ROOT, "reports"), exist_ok=True)
+
+
+def pytest_configure(config):
+    """把 ini 里相对路径的 --junitxml 锚定到仓库根（默认相对 cwd，PyCharm 会写到 tests\reports）。
+    注意 --junitxml 的 dest 是 xmlpath（pytest 5.x/8.x 相同）。"""
+    xml = getattr(config.option, "xmlpath", None)
+    if xml and not os.path.isabs(xml):
+        config.option.xmlpath = os.path.join(_REPO_ROOT, xml)
 
 
 @pytest.fixture(scope="session")
