@@ -102,6 +102,11 @@ def _generate_allure_report(terminalreporter, config):
             ["cmd", "/c", allure_bin, "generate", alluredir, "-o", outdir, "--clean"],
             env=env, capture_output=True, text=True, timeout=300)
         if r.returncode == 0:
+            try:                                # 注入中文界面（失败不影响报告可用）
+                from tools.allure_i18n import inject
+                inject(outdir)
+            except Exception:
+                pass
             terminalreporter.write_line("[allure] 报告: %s" % os.path.join(outdir, "index.html"))
         else:
             terminalreporter.write_line(
