@@ -33,6 +33,29 @@ def pytest_configure(config):
         config.option.xmlpath = os.path.join(_REPO_ROOT, xml)
 
 
+def pytest_addoption(parser):
+    parser.addoption("--no-report", action="store_true", default=False,
+                     help="不自动生成 TestStand 风格 HTML 报告")
+    parser.addoption("--report-suite", default=None,
+                     help="报告套件名（默认取测试文件名）")
+
+
+def pytest_terminal_summary(terminalreporter, exitstatus, config):
+    """会话结束（junit.xml 已写出）后自动生成 HTML 报告。
+    报告失败只打印提示，绝不影响测试结果与退出码。"""
+    if config.getoption("--no-report"):
+        return
+    xml = getattr(config.option, "xmlpath", None)
+    if not xml or not os.path.exists(xml):
+        return
+    try:
+        from tools.make_report import generate
+        path = generate(xml, suite=config.getoption("--report-suite"))
+        terminalreporter.write_line("[report] HTML 报告: %s" % path)
+    except Exception as e:                      # noqa: BLE001 —— 报告不允许污染测试结论
+        terminalreporter.write_line("[report] 生成失败（不影响测试结果）: %s" % e)
+
+
 @pytest.fixture(scope="session")
 def bench_config():
     with open(BENCH_CONFIG_PATH, "r", encoding="utf-8") as f:

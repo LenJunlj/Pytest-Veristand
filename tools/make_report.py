@@ -152,23 +152,46 @@ def build_html(suite_name, r, tester, out_path):
         f.write("".join(b))
 
 
-def main():
-    ap = argparse.ArgumentParser(description="junit.xml → TestStand 风格 HTML 报告")
-    ap.add_argument("junit", help="pytest 生成的 junit.xml 路径")
-    ap.add_argument("--suite", default="HIL功能测试", help="报告标题/套件名（默认模板同名）")
-    ap.add_argument("--tester", default=os.environ.get("USERNAME", "?"), help="测试员")
-    ap.add_argument("-o", "--outdir", default=None, help="输出目录（默认 junit 同目录）")
-    args = ap.parse_args()
+def default_suite_name(junit_path):
+    """从 junit 首个 testcase 的 file 属性推断套件名（即测试文件名去 .py）。"""
+    try:
+        root = ET.parse(junit_path).getroot()
+        suite = root if root.tag == "testsuite" else root.find("testsuite")
+        for tc in suite.iter("testcase"):
+            f = tc.get("file") or ""
+            stem = os.path.splitext(os.path.basename(f))[0]
+            if stem:
+                return stem
+    except Exception:
+        pass
+    return "HIL功能测试"
 
-    r = parse_junit(args.junit)
-    outdir = args.outdir or os.path.dirname(os.path.abspath(args.junit))
+
+def generate(junit_path, suite=None, tester=None, outdir=None):
+    """生成报告，返回输出路径。供 CLI 与 conftest 钩子共用。"""
+    r = parse_junit(junit_path)
+    suite = suite or default_suite_name(junit_path)
+    tester = tester or os.environ.get("USERNAME", "?")
+    outdir = outdir or os.path.dirname(os.path.abspath(junit_path))
     os.makedirs(outdir, exist_ok=True)
     now = datetime.datetime.now()
     fname = "%s_Report[%d %d %d][%d %d %d].html" % (
-        args.suite, now.hour, now.minute, now.second, now.year, now.month, now.day)
+        suite, now.hour, now.minute, now.second, now.year, now.month, now.day)
     out_path = os.path.join(outdir, fname)
-    build_html(args.suite, r, args.tester, out_path)
+    build_html(suite, r, tester, out_path)
+    return out_path
 
+
+def main():
+    ap = argparse.ArgumentParser(description="junit.xml → TestStand 风格 HTML 报告")
+    ap.add_argument("junit", help="pytest 生成的 junit.xml 路径")
+    ap.add_argument("--suite", default=None, help="报告标题/套件名（默认取测试文件名）")
+    ap.add_argument("--tester", default=None, help="测试员（默认系统用户名）")
+    ap.add_argument("-o", "--outdir", default=None, help="输出目录（默认 junit 同目录）")
+    args = ap.parse_args()
+
+    out_path = generate(args.junit, args.suite, args.tester, args.outdir)
+    r = parse_junit(args.junit)
     p = sum(1 for c in r["cases"] if c["status"] == "Passed")
     print("报告已生成: %s" % out_path)
     print("用例 %d 条: %d passed, %d failed/error, %d skipped"
