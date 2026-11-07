@@ -4,10 +4,21 @@
 翻译自存量各 .seq 的"测试用例初始化 / 测试用例结束"（两份 .seq 里完全一致）。
 模块特有的激励（如加热档位、NTC 注入）在各自模块的 stimulus.py 里继承本类扩展。
 """
+from bench_io import channels as bio
 from projects.p2546.common.channels import (
-    CH_CRASH, CH_ENG_STATE, CH_FIU1_CH10, CH_FIU1_CH1, CH_FIU3_CH7, CH_FIU3_CH9,
-    CH_IGN, CH_KEY_STATE, CH_PWR_CURR, CH_PWR_ON, CH_PWR_RELAY, CH_PWR_VOLT, ENG_STATE,
+    CH_CRASH, CH_ENG_STATE, CH_KEY_STATE, ENG_STATE, KEY_STATE, bench,
 )
+
+# 台架层通道本体在 bench_io（相对标识），本项目拼全路径（换项目只换前缀）
+CH_PWR_VOLT = bench(bio.PWR_VOLT)
+CH_PWR_CURR = bench(bio.PWR_CURR)
+CH_PWR_ON = bench(bio.PWR_ON)
+CH_PWR_RELAY = bench(bio.PWR_RELAY)
+CH_IGN = bench(bio.IGN)
+CH_FIU3_CH7 = bench(bio.FIU3_CH7)
+CH_FIU3_CH9 = bench(bio.FIU3_CH9)
+CH_FIU1_CH1 = bench(bio.FIU1_CH1)
+CH_FIU1_CH10 = bench(bio.FIU1_CH10)
 
 
 class BenchStimulus:
@@ -63,7 +74,7 @@ class BenchStimulus:
     def set_power_mode(self, key_state: float, ign_valid: bool):
         """电源模式 + 硬线 IGN（原文"设置电源模式X&硬线IGN无效/有效"）。
 
-        KeyState 编码照抄存量：OFF=0 / ACC=1 / ON(RUN)=2 / CRANK+IG=3 / Error=7
+        KeyState 编码见 channels.KEY_STATE：OFF=0 / ACC=1 / ON(RUN)=2 / CRANK+IG=3 / Error=7
         """
         self.ch.set(CH_KEY_STATE, float(key_state))
         self.ch.set(CH_IGN, 1.0 if ign_valid else 0.0)

@@ -11,17 +11,19 @@ veristand:
   deploy_timeout_ms: 120000
   channel_prefix: "Aliases/"
   model_target: "Controller"   # 模型所在目标名（ModelManager 参数 API 用，如 Controller）
-  # 每个用例前后强制复位的安全状态（通道全路径: 值；function 级 fixture 两侧都会执行，防状态泄漏）
-  # 只放"用例级激励"通道；电源/IGN/KeyState 等 bench 工况由 Stimulus.bench_ready/shutdown 管理
-  # （通道与值域照抄 projects/p2546/common/channels.py；HIL 安全确认 2026-11-06 已通过）
+  # 每个用例前后强制复位的安全状态（function 级 fixture 两侧都会执行，防状态泄漏）
+  # 复位分三级合并（docs/通道分层方案.md §5，后者覆盖前者）：
+  #   本段 = 台架级安全值（跨项目通用）→ project.yaml 的 veristand.reset_channels（可选）
+  #   → module.yaml 的 reset 段（模块激励复位，见 left_heating/module.yaml）
+  # 本段只放电源/继电器/点火台架安全态（值与 Stimulus.bench_shutdown 一致：
+  # 冗余但无害，且保护未写 shutdown 的新项目）。模型前缀段随项目 model_name（双项目同名 TongYu_IO）。
+  # HIL 安全确认 2026-11-06 已通过
   reset_channels:
-    'Targets\Controller\Simulation Models\Models\TongYu_IO\Parameters\IO\CAN IO Model\CAN BUS\MDLSoftECUDataToBus\HU_SEATSET_3F4_Msg\HU_DrvSeatHeat\Value': 1.0      # 加热请求 OFF（0=无请求/1=OFF/2~4=档位）
-    'Targets\Controller\Simulation Models\Models\TongYu_IO\Parameters\IO\HardLine IO Model\MDLDataToController\MDLSignalRouting\RES2\Value': 6500.0                    # NTC 常温中值
-    'Targets\Controller\Simulation Models\Models\TongYu_IO\Parameters\IO\HardLine IO Model\MDLDataToController\MDLSignalRouting\DO0\Value': 0.0                        # 加热开关松开
-    'Targets\Controller\Simulation Models\Models\TongYu_IO\Parameters\IO\FIU\FIU3_OUT_Channel9\Value': 0.0                                                            # NTC 故障注入取消
-    'Targets\Controller\Simulation Models\Models\TongYu_IO\Parameters\IO\FIU\FIU3_OUT_Channel7\Value': 0.0                                                            # 同上（存量双通道并存，都清）
-    'Targets\Controller\Simulation Models\Models\TongYu_IO\Parameters\IO\FIU\FIU1OUT_Channel1\Value': 0.0                                                             # 输出故障注入取消
-    'Targets\Controller\Simulation Models\Models\TongYu_IO\Parameters\IO\FIU\FIU1OUT_Channel10\Value': 0.0                                                            # 输出短地配合通道（原文从不复位，会污染后续用例）
+    'Targets\Controller\Simulation Models\Models\TongYu_IO\Parameters\IO\PowerControl\VlotageControl\Value': 13.5   # 程控电源回标称电压
+    'Targets\Controller\Simulation Models\Models\TongYu_IO\Parameters\IO\PowerControl\CurrentControl\Value': 20.0    # 量程电流
+    'Targets\Controller\Simulation Models\Models\TongYu_IO\Parameters\IO\PowerControl\ON//OFF/Value': 1.0             # 电源开
+    'Targets\Controller\Simulation Models\Models\TongYu_IO\Parameters\IO\PowerControl\Power_Relay\Value': 0.0         # 继电器断
+    'Targets\Controller\Simulation Models\Models\TongYu_IO\Parameters\IO\PowerControl\IGN\Value': 0.0                 # 点火断
 
 lock:
   path: "C:/HIL/bench.lock"   # 台架全局锁文件：本机所有使用者 + CI 必须指向同一个文件

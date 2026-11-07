@@ -2,13 +2,13 @@
 """P2546 左后大屏加热 —— 模块激励（加热档位 / NTC / 输出故障 / 加热开关 / 输出采集）
 
 台架工况（电源/点火/电源模式/发动机/碰撞）继承自项目级 BenchStimulus（common/bench.py）；
-通道常量与值域在 common/channels.py。生成依据：
+本模块通道与值域在 left_heating/channels.py（模块层）。生成依据：
 reports/P2546_左后大屏加热_dump.json（tools/seq_dump.py 产出）。
 """
 import time
 
 from projects.p2546.common.bench import BenchStimulus
-from projects.p2546.common.channels import (
+from projects.p2546.left_heating.channels import (
     CH_DO0, CH_FIU1_CH10, CH_FIU1_CH1, CH_HEAT_OUT_CAN, CH_HEAT_OUT_HARD, CH_HU_HEAT_REQ,
     CH_RES2, HEAT_REQ, HEAT_REQ_NONE, NTC_CHANNELS, NTC_FAULT, OUT_FAULT,
 )

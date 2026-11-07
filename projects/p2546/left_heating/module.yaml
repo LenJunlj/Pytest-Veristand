@@ -10,6 +10,17 @@ reference_report: "samples/P2546_左后大屏加热_Report[10 59 21][2026 11 3].
 dump: reports/P2546_左后大屏加热_dump.json      # tools/seq_dump.py 产出（相对仓库根，reports/ 已 gitignore）
 tests: tests/
 
+# 模块激励复位（三级合并的最内层：bench.yaml → project.yaml → 本段，后者覆盖；见 conftest vs fixture）
+# 值与原 bench.yaml 逐字相同（2026-11-07 分层搬迁，行为零变化）
+reset:
+  'Targets\Controller\Simulation Models\Models\TongYu_IO\Parameters\IO\CAN IO Model\CAN BUS\MDLSoftECUDataToBus\HU_SEATSET_3F4_Msg\HU_DrvSeatHeat\Value': 1.0      # 加热请求 OFF（0=无请求/1=OFF/2~4=档位）
+  'Targets\Controller\Simulation Models\Models\TongYu_IO\Parameters\IO\HardLine IO Model\MDLDataToController\MDLSignalRouting\RES2\Value': 6500.0                    # NTC 常温中值
+  'Targets\Controller\Simulation Models\Models\TongYu_IO\Parameters\IO\HardLine IO Model\MDLDataToController\MDLSignalRouting\DO0\Value': 0.0                        # 加热开关松开
+  'Targets\Controller\Simulation Models\Models\TongYu_IO\Parameters\IO\FIU\FIU3_OUT_Channel9\Value': 0.0                                                            # NTC 故障注入取消（故障恢复系列）
+  'Targets\Controller\Simulation Models\Models\TongYu_IO\Parameters\IO\FIU\FIU3_OUT_Channel7\Value': 0.0                                                            # 同上（前提/退出系列，存量双通道并存，都清）
+  'Targets\Controller\Simulation Models\Models\TongYu_IO\Parameters\IO\FIU\FIU1OUT_Channel1\Value': 0.0                                                             # 输出故障注入取消
+  'Targets\Controller\Simulation Models\Models\TongYu_IO\Parameters\IO\FIU\FIU1OUT_Channel10\Value': 0.0                                                            # 输出短地配合通道（原文从不复位，会污染后续用例）
+
 notes: |
   11 项评审闭环清单见 tests/test_heating.py 头部。
   关键实证：判定语义 EQ（实测 == Limits.Low）；加热请求编码 0=无请求/1=OFF/2~4=档位；

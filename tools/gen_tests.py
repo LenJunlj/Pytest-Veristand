@@ -33,35 +33,52 @@ import os
 import re
 import sys
 
-# ---- 已知通道映射：dump 变量路径(后缀) → channels.py 常量 + 语义动作 ----
+# ================= 通道尾缀映射：按层拆三张（docs/通道分层方案.md §6） =================
+# 匹配动作不变（match_var 迭代合并视图 VAR_MAP）：换车型只重写 PROJECT_VAR_MAP，
+# 换模块只在 MODULE_VAR_MAP 加镜像行，台架条目不动（通道本体见 bench_io/channels.py）。
 # kind: heat_req / crash / volt / eng / ntc_res / switch / fiu_ntc / fiu_out / raw / defect
-VAR_MAP = {
-    r"HU_DrvSeatHeat\Value":            ("CH_HU_HEAT_REQ", "heat_req"),
-    r"srP_Msg1_20E_Msg\CrashInfo\Value": ("CH_CRASH", "crash"),
+
+# ---- 层1 台架通道表（跨项目不动：电源/FIU 板卡 + 已知存量缺陷的 DI 写） ----
+BENCH_VAR_MAP = {
     r"PowerControl\VlotageControl\Value": ("CH_PWR_VOLT", "volt"),      # 原文拼写少了 e
     r"PowerControl\CurrentControl\Value": ("CH_PWR_CURR", "raw"),
     r"PowerControl\ON/OFF\Value":         ("CH_PWR_ON", "raw"),
     r"PowerControl\Power_Relay\Value":    ("CH_PWR_RELAY", "raw"),
     r"PowerControl\IGN\Value":            ("CH_IGN", "raw"),
-    r"BCM_VehSt1_2AB_Msg\KeyState\Value": ("CH_KEY_STATE", "raw"),
-    r"mrEMS_EngSt1_117_Msg\EngState\Value": ("CH_ENG_STATE", "eng"),
-    r"MDLSignalRouting\RES2\Value":      ("CH_RES2", "ntc_res"),
-    r"MDLSignalRouting\DO0\Value":       ("CH_DO0", "switch"),
-    r"FIU3_OUT_Channel7\Value":          ("CH_FIU3_CH7", "fiu_ntc"),
-    r"FIU3_OUT_Channel9\Value":          ("CH_FIU3_CH9", "fiu_ntc"),
-    r"FIU1OUT_Channel1\Value":           ("CH_FIU1_CH1", "fiu_out"),
-    r"FIU1OUT_Channel10\Value":          ("CH_FIU1_CH10", "fiu_out"),
-    # 已知存量缺陷：写 DI 通道（原文误写 DI1，应读 DI0）；写 Cyclic ECU 通道会被软 ECU 周期覆盖
-    r"Digital Input\port0\DI1":          (None, "defect_di"),
-    r"ECU\Incoming\Single-Point":        (None, "defect_can"),
+    r"FIU3_OUT_Channel7\Value":           ("CH_FIU3_CH7", "fiu_ntc"),
+    r"FIU3_OUT_Channel9\Value":           ("CH_FIU3_CH9", "fiu_ntc"),
+    r"FIU1OUT_Channel1\Value":            ("CH_FIU1_CH1", "fiu_out"),
+    r"FIU1OUT_Channel10\Value":           ("CH_FIU1_CH10", "fiu_out"),
+    # 已知存量缺陷：原文误写 DI1 写通道（应读 DI0）
+    r"Digital Input\port0\DI1":           (None, "defect_di"),
 }
 
-HEAT_REQ_NAMES = {1.0: "off", 2.0: "level1", 3.0: "level2", 4.0: "level3"}
-ENG_NAMES = {0.0: "not_running", 1.0: "running", 2.0: "crank", 3.0: "fault"}
-NTC_FAULT_NAMES = {8.0: "open", 12.0: "short_vcc", 14.0: "short_gnd"}
-OUT_FAULT_NAMES = {1.0: "short_gnd", 2.0: "open"}
+# ---- 层2 项目信号表（车型 CAN 矩阵，换车型重写） ----
+PROJECT_VAR_MAP = {
+    r"BCM_VehSt1_2AB_Msg\KeyState\Value": ("CH_KEY_STATE", "raw"),
+    r"mrEMS_EngSt1_117_Msg\EngState\Value": ("CH_ENG_STATE", "eng"),
+    r"srP_Msg1_20E_Msg\CrashInfo\Value":  ("CH_CRASH", "crash"),
+    # 已知存量缺陷：写 Cyclic ECU 通道会被软 ECU 周期覆盖
+    r"ECU\Incoming\Single-Point":         (None, "defect_can"),
+}
 
-# ---- 库序列（后排加热测试用例.seq）→ stimulus 方法 ----
+# ---- 层3 模块功能表（左后大屏加热；换模块重写/加镜像行） ----
+MODULE_VAR_MAP = {
+    r"HU_DrvSeatHeat\Value":              ("CH_HU_HEAT_REQ", "heat_req"),
+    r"MDLSignalRouting\RES2\Value":       ("CH_RES2", "ntc_res"),
+    r"MDLSignalRouting\DO0\Value":        ("CH_DO0", "switch"),
+}
+
+# 合并视图（同名后缀后者覆盖；三表键不相交，顺序不影响 match_var）
+VAR_MAP = {**BENCH_VAR_MAP, **PROJECT_VAR_MAP, **MODULE_VAR_MAP}
+
+# ---- 值域反查表：分层归位（项目=整车编码 / 模块=加热与故障注入值） ----
+ENG_NAMES = {0.0: "not_running", 1.0: "running", 2.0: "crank", 3.0: "fault"}   # 项目层
+HEAT_REQ_NAMES = {1.0: "off", 2.0: "level1", 3.0: "level2", 4.0: "level3"}     # 模块层
+NTC_FAULT_NAMES = {8.0: "open", 12.0: "short_vcc", 14.0: "short_gnd"}          # 模块层（D3）
+OUT_FAULT_NAMES = {1.0: "short_gnd", 2.0: "open"}                              # 模块层（D3）
+
+# ---- 库序列（后排加热测试用例.seq）→ stimulus 方法（模块层：换模块重写） ----
 LIBSEQ_MAP = {
     "测试用例初始化": "# conftest 的 bench fixture 已覆盖（连接复用/锁/工况初始化）",
     "测试用例结束":   "# teardown: bench_shutdown 已在 fixture 里（含撤加热增量）",

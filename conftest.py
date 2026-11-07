@@ -16,6 +16,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from helpers.bench_lock import BenchLock, LockBusy          # noqa: E402
 from helpers.channel import ChannelHelper                    # noqa: E402
+from helpers.config_merge import merge_reset_channels       # noqa: E402
 
 # 仓库根 = conftest.py 所在目录。所有相对路径锚定到这里，与运行时 cwd 解耦
 # （PyCharm 右键单文件运行时 cwd 是 tests\，不锚定就会找错 config、写歪 reports）
@@ -136,6 +137,9 @@ def bench_config(request):
     多项目支持：projects/<项目ID>/project.yaml 的 veristand 段（system_definition、
     model_target 等）覆盖 bench.yaml 的同名键——不同项目指向各自的 .nivssdf。
     一次会话只允许跑一个项目（跨项目混跑会串台架配置，直接报错）。
+
+    reset_channels 例外：按 bench → project → module 三级**字典合并**（后者覆盖，
+    docs/通道分层方案.md §5），module 取用例所在模块的 module.yaml 的 reset 段。
     """
     with open(BENCH_CONFIG_PATH, "r", encoding="utf-8") as f:
         cfg = yaml.safe_load(f)
@@ -143,31 +147,53 @@ def bench_config(request):
     if len(roots) > 1:
         raise pytest.UsageError(
             "一次 pytest 会话只能跑一个项目，检出了 %s；请分开运行" % roots)
+    bench_resets = (cfg.get("veristand") or {}).get("reset_channels") or {}
+    proj = {}
     if roots:
         with open(os.path.join(roots[0], "project.yaml"), "r", encoding="utf-8") as f:
             proj = yaml.safe_load(f) or {}
-        override = proj.get("veristand") or {}
-        if override:
-            cfg["veristand"] = {**(cfg.get("veristand") or {}), **override}
+    override = proj.get("veristand") or {}
+    module_resets = []
+    for mod_root in sorted(getattr(request.config, "_hil_module_roots", []) or []):
+        mod_path = os.path.join(mod_root, "module.yaml")
+        if os.path.isfile(mod_path):
+            with open(mod_path, "r", encoding="utf-8") as f:
+                doc = yaml.safe_load(f) or {}
+            module_resets.append(doc.get("reset") or {})
+    if override:
+        cfg["veristand"] = {**(cfg.get("veristand") or {}), **override}
         print(f"[bench] 项目配置覆盖: {roots[0]}（veristand: {sorted(override)}）")
+    # reset_channels 三级合并：project 的同名 dict 是逐键覆盖，不是整体替换
+    cfg.setdefault("veristand", {})["reset_channels"] = merge_reset_channels(
+        bench_resets, override.get("reset_channels"), module_resets)
+    n_mod = sum(len(m) for m in module_resets)
+    print(f"[bench] 复位通道: bench {len(bench_resets)} + 项目 {len(override.get('reset_channels') or {})}"
+          f" + 模块 {n_mod} 条 → 合并 {len(cfg['veristand']['reset_channels'])} 条")
     return cfg
 
 
 def pytest_collection_finish(session):
-    """收集完成后定位本次会话涉及的 project.yaml（projects/<项目ID>/ 层）。
+    """收集完成后定位本次会话涉及的 project.yaml（项目层）与 module.yaml（模块层）。
 
-    判定规则：从每个用例文件向上找最近的 project.yaml，其所在目录即项目根。
-    框架级用例（tests/ 下，无 project.yaml 祖先）不参与。
+    判定规则：从每个用例文件向上分别找最近的 project.yaml / module.yaml，
+    其所在目录即项目根 / 模块根。框架级用例（tests/ 下）两者都没有，不参与。
     """
     import pathlib
-    roots = set()
+    roots, mods = set(), set()
     for item in session.items:
         p = pathlib.Path(str(item.fspath))
+        proj_found = mod_found = False
         for anc in p.parents:
-            if (anc / "project.yaml").is_file():
+            if not mod_found and (anc / "module.yaml").is_file():
+                mods.add(str(anc))
+                mod_found = True
+            if not proj_found and (anc / "project.yaml").is_file():
                 roots.add(str(anc))
+                proj_found = True
+            if proj_found and mod_found:
                 break
     session.config._hil_project_roots = sorted(roots)
+    session.config._hil_module_roots = sorted(mods)
 
 
 @pytest.fixture(scope="session")
