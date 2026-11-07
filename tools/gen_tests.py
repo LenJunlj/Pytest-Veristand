@@ -3,10 +3,11 @@
 
 输入：tools/seq_dump.py 产出的结构化 dump JSON（如 reports/P2546_左后大屏加热_dump.json）。
 输出（默认 reports/gen/<模块名>/，pytest 不收集，复核后人工迁入 tests/）：
-    draft_<NN>_<序列名>.py   每条序列一个草稿：Setup/Main/Cleanup 逐步翻译成
-                             allure.step + stimulus/checks 调用，语义不确定处标 TODO
+    draft_all.py             **全部用例生成在同一个文件，顺序严格 = 输入 dump 的序列顺序**
+                             （用户 2026-11-07 规则，便于与后续用例 Excel/mapping 对照排查）；
+                             函数名 test_draft_<NN>，NN = dump 序号，与 manifest 一一对应
     gen_channels_draft.py    dump 里出现、channels.py 尚未覆盖的通道路径（下一个项目直接用）
-    gen_manifest.md          序列清单 / 映射命中率 / TODO 计数
+    gen_manifest.md          dump序号/序列/函数/TODO/期望值 清单（对照表）
 
 翻译规则（全部来自已闭环的实证，见 会话交接.md 机制速查）：
 - 判定语义 EQ：实测 == Limits.Low，High 不参与（不是区间）→ assert 精确等值；
@@ -106,7 +107,8 @@ def match_var(path):
 class Draft:
     def __init__(self, seq_name, seq_idx):
         self.name = seq_name
-        self.fname = f"draft_{seq_idx:02d}.py"
+        self.idx = seq_idx
+        self.func = f"test_draft_{seq_idx:02d}"   # 序号=dump 序列号，与输入顺序一一对应
         self.body = []          # (step_label, [code lines])
         self.todos = 0
         self.expects = []       # (输出键, 期望值) 摘要用
@@ -290,35 +292,16 @@ def gen_sequence(seq, idx, dump_file):
     return draft
 
 
-def render_draft(draft, dump_file, module_label):
+def render_function(draft, module_label):
+    """单条序列 → 一个测试函数（无模块头；由 main 拼进单一文件）"""
     lines = []
     a = lines.append
-    a('# -*- coding: utf-8 -*-')
-    a(f'"""【草稿·未复核】{draft.name} —— tools/gen_tests.py 自动生成')
-    a("")
-    a(f"来源: {dump_file}（序列 {draft.name}）")
-    a(f"生成: {datetime.date.today().isoformat()}  模块: {module_label}")
-    a("")
-    a("复核要点（生成器已按实证语义处理，仍需人工确认）:")
-    a("  1. 判定为 EQ 精确等值（实测 == Limits.Low），High 不参与；")
-    a("  2. request_heat 含 2s 内部等待，勿再补 sleep；")
-    a("  3. TODO 项是语义未定/存量缺陷，逐条拍板后删除标记；")
-    a("  4. 复核通过后：文件重命名为 test_*.py 迁入 tests/，并补 story 划分。")
-    a('"""')
-    a("import time")
-    a("")
-    a("import allure")
-    a("import pytest")
-    a("")
-    a("pytestmark = pytest.mark.hil")
-    a("")
-    a("")
+    a(f'# ----- dump 序列 {draft.idx}: {draft.name} -----')
     a("@allure.epic(\"P2546 HIL 测试\")")
     a(f"@allure.feature(\"{module_label}\")")
     a(f"@allure.title(\"{draft.name}\")")
-    a("def test_draft(bench):")
-    a(f'    """{draft.name}：原文 Setup/Main/Cleanup 逐步翻译"""')
-    cur_group = None
+    a(f"def {draft.func}(bench):")
+    a(f'    """{draft.name}（dump 序号 {draft.idx}）：原文 Setup/Main/Cleanup 逐步翻译"""')
     for label, code in draft.body:
         if label == "TODO":
             for c in code:
@@ -335,7 +318,36 @@ def render_draft(draft, dump_file, module_label):
                 a(f"        {c}")
     if not draft.body:
         a("    pass   # 空序列")
-    return "\n".join(lines) + "\n", draft.todos
+    return "\n".join(lines) + "\n\n\n", draft.todos
+
+
+def render_module(parts, dump_file, module_label, n_gen):
+    """全部用例拼成单一文件：顺序 = dump 序列顺序（用户规则，便于与用例 Excel/mapping 对照）"""
+    lines = []
+    a = lines.append
+    a('# -*- coding: utf-8 -*-')
+    a(f'"""【草稿·未复核】{module_label} 全部用例 —— tools/gen_tests.py 自动生成')
+    a("")
+    a(f"来源: {dump_file}；生成: {datetime.date.today().isoformat()}；共 {n_gen} 条")
+    a("")
+    a("**顺序规则（用户 2026-11-07 拍板）：用例严格按输入 dump 的序列顺序生成在同一文件，")
+    a("函数名后缀 = dump 序号，与 gen_manifest.md 一一对应——后续用例 Excel/mapping 按此对照排查。**")
+    a("")
+    a("复核要点（生成器已按实证语义处理，仍需人工确认）:")
+    a("  1. 判定为 EQ 精确等值（实测 == Limits.Low），High 不参与；")
+    a("  2. request_heat 含 2s 内部等待，勿再补 sleep；")
+    a("  3. TODO 项是语义未定/存量缺陷，逐条拍板后删除标记；")
+    a("  4. 复核通过后：文件重命名为 test_*.py 迁入 tests/（函数名建议保留序号前缀）。")
+    a('"""')
+    a("import time")
+    a("")
+    a("import allure")
+    a("import pytest")
+    a("")
+    a("pytestmark = pytest.mark.hil")
+    a("")
+    a("")
+    return "\n".join(lines) + "".join(parts)
 
 
 def main():
@@ -360,18 +372,19 @@ def main():
     for suffix in VAR_MAP:
         known_paths.add(suffix)
 
-    manifest = ["| 序列 | 草稿文件 | TODO | 期望值 |", "|---|---|---|---|"]
+    manifest = ["| dump序号 | 序列 | 函数 | TODO | 期望值 |", "|---|---|---|---|---|"]
     unmapped = {}
+    parts = []
     n_gen = 0
     for idx, seq in enumerate(d["sequences"]):
         name = seq["name"]
         if only and name not in only:
             continue
         if name in skip:
-            manifest.append(f"| {name} | （--skip 跳过） | - | - |")
+            manifest.append(f"| {idx} | {name} | （--skip 跳过） | - | - |")
             continue
         if name in HELPERS and not only:
-            manifest.append(f"| {name} | （编排/公共子序列，不生成） | - | - |")
+            manifest.append(f"| {idx} | {name} | （编排/公共子序列，不生成） | - | - |")
             continue
 
         # 收集未映射路径
@@ -384,12 +397,16 @@ def main():
                             unmapped.setdefault(str(v["VariableName"]), set()).add(str(v.get("VariableValue")))
 
         draft = gen_sequence(seq, idx, dump_file)
-        text, todos = render_draft(draft, os.path.basename(dump_file), module_label)
-        with open(os.path.join(outdir, draft.fname), "w", encoding="utf-8") as f:
-            f.write(text)
+        fn_text, todos = render_function(draft, module_label)
+        parts.append(fn_text)
         exp = ", ".join(f"{k}=={v:g}" for k, v in draft.expects) or "-"
-        manifest.append(f"| {name} | {draft.fname} | {todos} | {exp} |")
+        manifest.append(f"| {idx} | {name} | {draft.func} | {todos} | {exp} |")
         n_gen += 1
+
+    # 单一文件：顺序 = 输入 dump 顺序（用户规则，Excel/mapping 对照）
+    all_file = os.path.join(outdir, "draft_all.py")
+    with open(all_file, "w", encoding="utf-8") as f:
+        f.write(render_module(parts, os.path.basename(dump_file), module_label, n_gen))
 
     # 未映射通道 → 常量草稿
     if unmapped:
@@ -406,7 +423,7 @@ def main():
         if unmapped:
             f.write(f"\n未映射通道 {len(unmapped)} 条 → gen_channels_draft.py\n")
 
-    print(f"[done] {n_gen} drafts -> {outdir}")
+    print(f"[done] {n_gen} 条用例（单一文件,按输入顺序） -> {all_file}")
     print(f"[done] manifest: {os.path.join(outdir, 'gen_manifest.md')}")
     if unmapped:
         print(f"[warn] 未映射通道 {len(unmapped)} 条（见 gen_channels_draft.py）")
