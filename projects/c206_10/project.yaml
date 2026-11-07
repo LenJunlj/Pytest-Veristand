@@ -1,0 +1,24 @@
+# c206_10 —— 项目级配置(一个项目 = 一套 VeriStand 工程,下含多个 .seq 模块)
+# 目录名规范成合法 Python 包名(C206-10环境控制器 → c206_10),原名见 name。
+# 台架级配置(Gateway、锁、Allure)在仓库根 config/bench.yaml,本文件的 veristand 段会覆盖它。
+
+id: c206_10
+name: C206-10环境控制器
+epic: C206-10 环境控制器 HIL 测试
+
+# 覆盖 config/bench.yaml 的 veristand 段(多项目各自指向自己的 .nivssdf)
+veristand:
+  system_definition: "TODO-sdf到位后填绝对路径"   # ← 待用户提供 C206-10 的 .nivssdf 后回填
+  model_target: "Controller"        # 模型所在目标名(ModelManager 参数 API 用;以新 sdf 为准)
+
+# 模块清单(= 一个 .seq / 一个被测功能);项目刚建,待 dump 存量 .seq 后登记
+modules: []
+#  - id: <模块>
+#    name: <中文名>
+#    seq_source: "<.seq 绝对路径>"
+
+notes: |
+  建于 2026-11-07,通道分层方案(docs/通道分层方案.md)拍板前先不复制 p2546/common——
+  新项目通道应从 sdf 提取(tools/analyze_sdf.py)而非照抄 TongYu_IO 常量。
+  samples/ 为 sdf 与 .seq 落地区;接入顺序:sdf → analyze_sdf 出登记表 → 与 p2546 登记表
+  diff(台架层复用验证) → seq dump → gen_tests 草稿。
