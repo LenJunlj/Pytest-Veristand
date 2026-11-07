@@ -120,13 +120,48 @@ class Draft:
 
 
 def translate_setvar(step, draft):
-    for v in step["props"].get("Variables") or []:
-        if not isinstance(v, dict) or not v.get("VariableName"):
-            continue
-        path = str(v["VariableName"]).replace("/", "\\")
-        val = to_num(v.get("VariableValue"))
+    name = str(step["name"])
+    variables = [v for v in (step["props"].get("Variables") or [])
+                 if isinstance(v, dict) and v.get("VariableName")]
+
+    def path_of(v):
+        return str(v["VariableName"]).replace("/", "\\")
+
+    def val_of(v):
+        return to_num(v.get("VariableValue"))
+
+    # ---- FIU1 加热输出故障：CH10 与 CH1 必须按"配合对"整体翻译 ----
+    # 短地 = CH10=2 + CH1=1（两条写在同一步或分步）；开路 = CH1=2；取消 = 全 0
+    fiu_ch10 = next((v for v in variables if "FIU1OUT_Channel10" in path_of(v)), None)
+    fiu_ch1 = next((v for v in variables if "FIU1OUT_Channel1\\" in path_of(v)
+                    or path_of(v).endswith("FIU1OUT_Channel1\\Value")), None)
+    if fiu_ch1 is not None or fiu_ch10 is not None:
+        ch1v, ch10v = (val_of(fiu_ch1) if fiu_ch1 else None), (val_of(fiu_ch10) if fiu_ch10 else None)
+        if ch10v == 2.0 or ch1v == 1.0:
+            src = "CH10=2 + CH1=1" if (ch10v == 2.0 and ch1v == 1.0) else f"CH1={ch1v:g}" + (f" + CH10={ch10v:g}" if ch10v is not None else "")
+            draft.add(name, [f"bench.inject_out_fault('short_gnd')   # {src}（短地配合对，stimulus 一并写 CH10/CH1）"])
+        elif ch1v == 2.0:
+            draft.add(name, ["bench.inject_out_fault('open')   # CH1=2"])
+        elif (ch1v == 0.0 and ch10v in (0.0, None)) or (ch1v is None and ch10v == 0.0):
+            draft.add(name, ["bench.clear_out_fault()   # 清 CH1+CH10（原文只清 CH1，CH10 泄漏是存量缺陷）"])
+        else:
+            draft.todo([f"# TODO 未知 FIU1 组合: CH1={ch1v} CH10={ch10v}"])
+        # 该步其余变量照常翻译，FIU1 两条已处理
+        variables = [v for v in variables if v is not fiu_ch1 and v is not fiu_ch10]
+
+    # ---- 电源模式：KeyState 与 IGN 常同步骤成对写 → set_power_mode ----
+    ks = next((v for v in variables if "KeyState" in path_of(v)), None)
+    ign = next((v for v in variables if path_of(v).endswith(r"IGN\Value")), None)
+    if ks is not None and ign is not None:
+        ksv, ignv = val_of(ks), val_of(ign)
+        draft.add(name, [f"bench.set_power_mode({ksv:g}, {bool(ignv)})   # KeyState={ksv:g} + IGN={ignv:g}"
+                         f"（原文一步成对写）"])
+        variables = [v for v in variables if v is not ks and v is not ign]
+
+    for v in variables:
+        path = path_of(v)
+        val = val_of(v)
         const, kind = match_var(path)
-        name = str(step["name"])
         if kind is None:
             draft.todo([f"# TODO 未映射通道（见 gen_channels_draft.py）: {path} = {v.get('VariableValue')}"])
             continue
@@ -163,16 +198,8 @@ def translate_setvar(step, draft):
             else:
                 draft.todo([f"# TODO 未知 FIU3 值: {const} = {v.get('VariableValue')}（NTC_FAULT 无此档）"])
         elif kind == "fiu_out":
-            fault = OUT_FAULT_NAMES.get(val)
-            short_gnd_pair = "short_gnd" in (fault or "") or (
-                "Channel10" in path and val == 2.0)
-            if fault:
-                draft.add(name, [f"bench.inject_out_fault('{fault}')   # 写 {v.get('VariableValue')}"
-                                 + ("（CH10=2 配合通道已封装）" if short_gnd_pair else "")])
-            elif val == 0.0:
-                draft.add(name, ["bench.clear_out_fault()   # 清 CH1+CH10（原文只清 CH1，CH10 泄漏是存量缺陷）"])
-            else:
-                draft.todo([f"# TODO 未知 FIU1 值: {const} = {v.get('VariableValue')}"])
+            # 单独出现（未成对）时兜底；正常路径已在函数开头按配合对整体处理
+            draft.todo([f"# TODO FIU1 单通道写入未配对: {const} = {v.get('VariableValue')}"])
         elif kind in ("raw",):
             if const == "CH_KEY_STATE":
                 draft.todo([f"# TODO 电源模式: bench.set_power_mode(key_state={v.get('VariableValue')}, ign_valid=?)"
