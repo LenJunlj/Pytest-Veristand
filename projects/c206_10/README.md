@@ -3,16 +3,26 @@
 一个项目 = 一套 VeriStand 工程,下含多个 `.seq` 模块。目录名规范成合法 Python 包名
 (`C206-10环境控制器 → c206_10`,正式名见 `project.yaml` 的 `name`),与 p2546 同构。
 
-**状态:2026-11-07 建项,sdf 待接入**(放入 `samples/` 后告知路径即可)。
+**状态:2026-11-07 建项;同日 sdf 首提取完成**(`docs/c206_10_registry.csv` 443 行,diff 结论见下)。
+sdf 本体在 `E:/C206-10项目/Veristand项目/C026-10.nivssdf`(今日 15:40 版);注意 sdf 内 Root 名是
+**C026-10**(零二六),与目录名 c206_10 / 口头 C206-10 的正式名差异待用户确认。
 
-## 接入步骤(sdf 到位后)
+## 首提取 diff 结论(与 p2546,2026-11-07)
 
-1. `python tools/analyze_sdf.py "projects/c206_10/samples/<sdf文件>" reports/c206_10_analysis`
-   → 出本项目通道登记表(三层归层)
-2. 与 `docs/bench_io_registry.csv`(p2546 版)diff:台架层通道(FIU/电源/RES/DAQ/CAN1)
-   应大面积复用 → 通道分层方案 D2(相对标识+拼前缀)的直接验证
-3. 视 diff 结果拍板:沿用 p2546 的 `common/` 模式,或等 bench_io/ 分层落地后按新结构建
-4. 存量 `.seq` 进 `samples/` → `tools/seq_dump.py` → `tools/gen_tests.py` 草稿 → 人工复核迁入
+- **台架层 100% 复用**:模型同为 TongYu_IO;PowerControl(含 VlotageControl 拼写/默认值)、
+  MDLSignalRouting 56 条、FIU 30 路通道本体、CAN1 内部总线 41 报文 166 信号、DAQ Dev1 84 通道
+  ——与 p2546 逐项 diff 全部为空
+- **项目层零交集**:CAN 矩阵 7 报文(ABS_1/BCM1_2/BCM1_11/EEM_1/GW_Config/IC_1/PDCSlave_2)全新
+- **DUT = SCCU(环境控制器)**,走 **CAN2 口**(p2546 是 CAN/ECU 口):读 `SCCU_1 (582)`
+  SeatheatInd_TL/TR + TL/TRSeatHeatSwitch、`OTA_VerInfo_SCCU (1130)`;写 BCM1_11 (563)
+  `BCM_TL/TRseatHeatLevelSet` 等 15 信号
+- **本项目独有硬件**:DAQ Dev2 计数器 CO0~CO3(频率/占空比,疑测风机 PWM,待用例证实)
+
+## 接入步骤(sdf 已到位,剩 3~5)
+
+1. ~~sdf 落位~~ ✅ 2. ~~analyze_sdf 提取~~ ✅ 3. ~~与 p2546 登记表 diff~~ ✅(结论如上)
+4. 视分层方案拍板结果建 `common/`(或按 bench_io/ 新结构)
+5. 存量 `.seq` 进 `samples/` → `tools/seq_dump.py` → `tools/gen_tests.py` 草稿 → 人工复核迁入
 
 ## 结构(随接入逐步成形)
 

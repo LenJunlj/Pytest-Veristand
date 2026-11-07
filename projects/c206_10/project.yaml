@@ -8,17 +8,20 @@ epic: C206-10 环境控制器 HIL 测试
 
 # 覆盖 config/bench.yaml 的 veristand 段(多项目各自指向自己的 .nivssdf)
 veristand:
-  system_definition: "TODO-sdf到位后填绝对路径"   # ← 待用户提供 C206-10 的 .nivssdf 后回填
-  model_target: "Controller"        # 模型所在目标名(ModelManager 参数 API 用;以新 sdf 为准)
+  system_definition: "E:/C206-10项目/Veristand项目/C026-10.nivssdf"   # 2026-11-07 用户提供(sdf 内 Root 名=C026-10,与目录名 c206_10 的 206/026 差异待用户确认正式名)
+  model_target: "Controller"        # 模型所在目标名(ModelManager 参数 API 用;已验证与新 sdf 一致)
 
-# 模块清单(= 一个 .seq / 一个被测功能);项目刚建,待 dump 存量 .seq 后登记
+# 模块清单(= 一个 .seq / 一个被测功能);待 dump 存量 .seq 后登记
 modules: []
 #  - id: <模块>
 #    name: <中文名>
 #    seq_source: "<.seq 绝对路径>"
 
 notes: |
-  建于 2026-11-07,通道分层方案(docs/通道分层方案.md)拍板前先不复制 p2546/common——
-  新项目通道应从 sdf 提取(tools/analyze_sdf.py)而非照抄 TongYu_IO 常量。
-  samples/ 为 sdf 与 .seq 落地区;接入顺序:sdf → analyze_sdf 出登记表 → 与 p2546 登记表
-  diff(台架层复用验证) → seq dump → gen_tests 草稿。
+  2026-11-07 sdf 首提取完成(docs/c206_10_registry.csv 443 行):
+  - 模型同为 TongYu_IO;台架层与 p2546 完全一致(FIU 通道本体/PowerControl 含拼写与默认值/
+    MDLSignalRouting 56 条/CAN1 内部总线 41 报文 166 信号/DAQ Dev1 84 通道)——分层方案 D2 实证通过
+  - 差异:C026-10 独有 Dev2 计数器 CO0~CO3(频率/占空比,疑测风机 PWM);DUT 口=CAN2
+    (p2546 是 CAN/ECU 口);CAN 矩阵零交集(7 报文:ABS/BCM1_2/BCM1_11/EEM/GW_Config/IC/PDCSlave)
+  - DUT=SCCU(环境控制器):读 SCCU_1 (582) SeatheatInd_TL/TR + 开关;写 BCM_TL/TRseatHeatLevelSet
+  - Current_Collection 在本项目同时挂 CAN1 Incoming+Outgoing(p2546 仅 Incoming),如实登记未深究
