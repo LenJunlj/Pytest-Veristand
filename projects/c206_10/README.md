@@ -17,7 +17,8 @@ sdf 本体在 `E:/C206-10项目/Veristand项目/C026-10.nivssdf`(2026-11-07 15:4
 - **DUT = SCCU(环境控制器)**,走 **CAN2 口**(p2546 是 CAN/ECU 口):读 `SCCU_1 (582)`
   SeatheatInd_TL/TR + TL/TRSeatHeatSwitch、`OTA_VerInfo_SCCU (1130)`;写 BCM1_11 (563)
   `BCM_TL/TRseatHeatLevelSet` 等 15 信号
-- **本项目独有硬件**:DAQ Dev2 计数器 CO0~CO3(频率/占空比,疑测风机 PWM,待用例证实)
+- **台架层增量更正(2026-11-07)**:DAQ Dev2 计数器 CO0~CO3(频率/占空比)两个项目 sdf 都有(各 8 条),
+  非本项目独有(此前误判,已更正);本项目相对 p2546 的真实差异只有 DUT 口(CAN2)与 CAN 矩阵
 
 ## 接入步骤(sdf 已到位,剩 3~5)
 
