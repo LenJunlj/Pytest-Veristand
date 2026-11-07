@@ -3,12 +3,15 @@
 # 台架级配置(Gateway、锁、Allure)在仓库根 config/bench.yaml,本文件的 veristand 段会覆盖它。
 
 id: c206_10
-name: C206-10环境控制器
+name: C206-10环境控制器          # 正式名(用户确认 2026-11-07)
 epic: C206-10 环境控制器 HIL 测试
 
 # 覆盖 config/bench.yaml 的 veristand 段(多项目各自指向自己的 .nivssdf)
 veristand:
-  system_definition: "E:/C206-10项目/Veristand项目/C026-10.nivssdf"   # 2026-11-07 用户提供(sdf 内 Root 名=C026-10,与目录名 c206_10 的 206/026 差异待用户确认正式名)
+  # 注意:sdf 文件名与内部 Root 名是 C026-10 —— 用户确认为当年 VeriStand 建工程时的笔误,
+  # 正式名 C206-10。不影响调用:通道路径不含 Root 名、attach 按本文件路径匹配。
+  # 若日后在 VeriStand 里改名/改文件名,同步改本行即可。
+  system_definition: "E:/C206-10项目/Veristand项目/C026-10.nivssdf"
   model_target: "Controller"        # 模型所在目标名(ModelManager 参数 API 用;已验证与新 sdf 一致)
 
 # 模块清单(= 一个 .seq / 一个被测功能);待 dump 存量 .seq 后登记
