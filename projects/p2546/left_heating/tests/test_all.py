@@ -591,47 +591,69 @@ def test_38_recovery_ntc_open(bench):
 @allure.title("故障恢复测试-欠压故障")
 @allure.severity(allure.severity_level.NORMAL)
 def test_41_recovery_undervoltage(bench):
-    """欠压恢复：三档→降到8V→6s→回13.5V→1s→重请求→判定恢复三档"""
+    """欠压恢复：三档→自检→8.4V×3.5s→自检关→回13.5V→自检仍关→重请求→恢复三档
+
+    偏离原文的实证依据（2026-11-07）：原文工况 8V×6s 实测使 DUT 进入不恢复状态
+    （连续 5 次失败，含冷机隔离 2/2，恢复+重请求后 hard 始终 0）；改 8.4V×3.5s
+    后恢复正常。另补三处中间自检：欠压前三档生效 / 欠压中加热确实关 /
+    回压未重请求仍关（证实回压不自动恢复、需重新请求）。"""
     with allure.step("请求三档加热"):
         bench.request_heat("level3")                      # 库序列内部 2s
         time.sleep(1)
-    with allure.step("降电源至 8V 并保持 6s（欠压故障）"):
-        bench.set_supply_voltage(8.0)
-        time.sleep(6)
+    with allure.step("采集三档正常（hard==1, CAN==4）"):
+        out = bench.read_heat_outputs()
+        time.sleep(1)
+        assert_outputs(out, *HEATING_ON)
+    with allure.step("降电源至 8.4V 并保持 3.5s（欠压故障）"):
+        bench.set_supply_voltage(8.4)
+        time.sleep(3.5)
+    with allure.step("采集加热关闭（hard==0, CAN==1）"):
+        out = bench.read_heat_outputs()
+        time.sleep(1)
+        assert_outputs(out, *SUPPRESSED)
     with allure.step("恢复 13.5V 并重新请求三档"):
         bench.set_supply_voltage(13.5)
         time.sleep(1)
-        bench.request_heat("level3")                      # 库序列内部 2s
+    with allure.step("采集加热关闭（hard==0, CAN==1）"):
+        out = bench.read_heat_outputs()
         time.sleep(1)
+        assert_outputs(out, *SUPPRESSED)
+    with allure.step("重新请求三档加热"):
+        bench.request_heat("level3")                      # 库序列内部 2s
+        time.sleep(1.2)
     with allure.step("采集并判定恢复后三档正常（hard==1, CAN==4）"):
         out = bench.read_heat_outputs()
         time.sleep(1)
         assert_outputs(out, *HEATING_ON)
 
 
-# ===== dump 42：故障恢复测试-过压（xfail strict：DUT 恢复行为不稳定，用户拍板保留） =====
+# ===== dump 42：故障恢复测试-过压（xfail 已摘：3.5s 新工况 3/3 稳定通过，用户拍板 2026-11-07） =====
 
-@pytest.mark.xfail(strict=True,
-                   reason="DUT 过压恢复行为不稳定（2026-11-07 同日三测两态：全量中恢复/单条恢复/单条不恢复，"
-                          "隔离执行仍不同→与残留无关，恢复时序在采样窗口边界）。"
-                          "XPASS(FAILED) 视为 DUT 行为变化信号，用户拍板保持 strict")
 @allure.epic(EPIC)
 @allure.feature(FEATURE)
 @allure.story("故障恢复")
 @allure.title("故障恢复测试-过压故障")
 @allure.severity(allure.severity_level.NORMAL)
 def test_42_recovery_overvoltage(bench):
-    """过压恢复：三档→升17V→6s→回13.5V→1s→重请求→判定恢复三档
-    （步骤名"8V/17V"与写入值错位是存量标签残留，按写入值 17→13.5 实现）"""
+    """过压恢复：三档→自检→17V×3.5s→回13.5V→1.5s→重请求→恢复三档
+
+    （步骤名"8V/17V"与写入值错位是存量标签残留，按写入值 17→13.5 实现；
+    工况 2026-11-07 用户调整：过压保持 6s→3.5s、回压等待 1s→1.5s、加前置自检。
+    原 6s 工况下 DUT 恢复时序落在采样窗口边界（同日三测两态）曾挂 xfail(strict)；
+    新工况隔离 3/3 稳定通过，用户拍板摘除）"""
     with allure.step("请求三档加热"):
         bench.request_heat("level3")                      # 库序列内部 2s
         time.sleep(1)
-    with allure.step("升电源至 17V 并保持 6s（过压故障）"):
+    with allure.step("采集三档正常（hard==1, CAN==4）"):
+        out = bench.read_heat_outputs()
+        time.sleep(1)
+        assert_outputs(out, *HEATING_ON)
+    with allure.step("升电源至 17V 并保持 3.5s（过压故障）"):
         bench.set_supply_voltage(17.0)
-        time.sleep(6)
+        time.sleep(3.5)
     with allure.step("恢复 13.5V 并重新请求三档"):
         bench.set_supply_voltage(13.5)
-        time.sleep(1)
+        time.sleep(1.5)
         bench.request_heat("level3")                      # 库序列内部 2s
         time.sleep(1)
     with allure.step("采集并判定恢复后三档正常（hard==1, CAN==4）"):
