@@ -7,6 +7,10 @@ r"""P2546 左后大屏加热 —— 全部用例单文件（2026-11-07 由 6 个
 缺号 = 整序列 Skip 未翻译（27/29 输出开路前提退出、34~36 控温已删、39/40 输出故障恢复待拍板、43 40min 已删）。
 后续用例 Excel / mapping 按序号对照排查。
 
+**报告顺序规则（用户强制要求 2026-11-07）：Allure 报告必须按用例序号排列，不做行为分组** ——
+标题以零填充序号前缀（"01·…"）作排序键；epic/feature/story 装饰器已全部移除、禁止加回
+（它们会让报告按"故事"分组打乱用例顺序）；severity 保留（不影响排序）。
+
 判定语义（全项目统一）：EQ 精确等值（实测 == Limits.Low，High=11 是模板残留不参与）。
 
 ── 11 项闭环清单（2026-11-06 评审，三源交叉验证：结构化 dump + TestStand 历史报告实测值 + interop RunMode）──
@@ -44,9 +48,6 @@ from projects.p2546.common.checks import assert_outputs
 
 pytestmark = pytest.mark.hil
 
-EPIC = "P2546 HIL 测试"
-FEATURE = "左后大屏加热"
-
 # (hard 期望, CAN 期望) —— EQ 语义（实测 == Limits.Low）
 HEATING_ON = (1.0, 4.0)      # 三档正常加热
 SUPPRESSED = (0.0, 1.0)      # 被抑制/停止（CAN=1 是 OFF 编码）
@@ -77,10 +78,7 @@ NTC_FAULTS = [("short_gnd", "短地"), ("short_vcc", "短电源"), ("open", "开
 
 # ===== dump 1：前提条件测试_欠压 =====
 
-@allure.epic(EPIC)
-@allure.feature(FEATURE)
-@allure.story("欠压保护")
-@allure.title("前提条件测试_欠压：8.5V 抑制加热")
+@allure.title("01·前提条件测试_欠压：8.5V 抑制加热")
 @allure.severity(allure.severity_level.CRITICAL)
 def test_01_undervoltage_inhibits(bench):
     """前提欠压：8.5V 下请求三档 → 输出被抑制（hard==0, CAN==1）"""
@@ -98,10 +96,7 @@ def test_01_undervoltage_inhibits(bench):
 
 # ===== dump 2：前提条件测试_过压 =====
 
-@allure.epic(EPIC)
-@allure.feature(FEATURE)
-@allure.story("过压保护")
-@allure.title("前提条件测试_过压：17V 抑制加热")
+@allure.title("02·前提条件测试_过压：17V 抑制加热")
 @allure.severity(allure.severity_level.CRITICAL)
 def test_02_overvoltage_blocks(bench):
     """前提过压：初始化→17V→1s→请求三档→3s→采集→判定输出被抑制"""
@@ -120,10 +115,7 @@ def test_02_overvoltage_blocks(bench):
 
 # ===== dump 3：退出条件测试_欠压 =====
 
-@allure.epic(EPIC)
-@allure.feature(FEATURE)
-@allure.story("欠压保护")
-@allure.title("退出条件测试_欠压：加热中降 8.5V 输出停止")
+@allure.title("03·退出条件测试_欠压：加热中降 8.5V 输出停止")
 @allure.severity(allure.severity_level.CRITICAL)
 def test_03_undervoltage_exit(bench):
     """退出欠压：正常电压加热中 → 降 8.5V → 5s → 输出停止"""
@@ -146,10 +138,7 @@ def test_03_undervoltage_exit(bench):
 
 # ===== dump 4：退出条件测试_过压 =====
 
-@allure.epic(EPIC)
-@allure.feature(FEATURE)
-@allure.story("过压保护")
-@allure.title("退出条件测试_过压：加热中升 17V 输出停止")
+@allure.title("04·退出条件测试_过压：加热中升 17V 输出停止")
 @allure.severity(allure.severity_level.CRITICAL)
 def test_04_overvoltage_exit(bench):
     """退出过压：请求三档→1s→采集(加热中)→升 17V→5s→采集→判定停止"""
@@ -172,10 +161,7 @@ def test_04_overvoltage_exit(bench):
 
 # ===== dump 5：前提条件测试_整车碰撞 =====
 
-@allure.epic(EPIC)
-@allure.feature(FEATURE)
-@allure.story("碰撞保护")
-@allure.title("前提条件测试_整车碰撞：碰撞置位抑制加热")
+@allure.title("05·前提条件测试_整车碰撞：碰撞置位抑制加热")
 @allure.severity(allure.severity_level.CRITICAL)
 def test_05_crash_blocks(bench):
     """前提碰撞：初始化→碰撞=1→1s→请求三档→3s→采集→判定被抑制"""
@@ -194,10 +180,7 @@ def test_05_crash_blocks(bench):
 
 # ===== dump 6：退出条件测试_整车碰撞 =====
 
-@allure.epic(EPIC)
-@allure.feature(FEATURE)
-@allure.story("碰撞保护")
-@allure.title("退出条件测试_整车碰撞：加热中置碰撞输出停止")
+@allure.title("06·退出条件测试_整车碰撞：加热中置碰撞输出停止")
 @allure.severity(allure.severity_level.CRITICAL)
 def test_06_crash_exit(bench):
     """退出碰撞：请求三档→1s→采集(加热中)→碰撞=1→3s→采集→判定停止"""
@@ -220,10 +203,7 @@ def test_06_crash_exit(bench):
 
 # ===== dump 7~9：前提条件测试_发动机状态（NotRunning/Crank/Fault） =====
 
-@allure.epic(EPIC)
-@allure.feature(FEATURE)
-@allure.story("发动机状态-前提条件")
-@allure.title("前提条件测试_发动机状态{state}：抑制加热")
+@allure.title("07·前提条件测试_发动机状态{state}：抑制加热")
 @allure.severity(allure.severity_level.CRITICAL)
 @pytest.mark.parametrize("state", ["not_running", "crank", "fault"])
 def test_07_engine_blocks(bench, state):
@@ -243,10 +223,7 @@ def test_07_engine_blocks(bench, state):
 
 # ===== dump 10：退出条件测试_发动机状态NoRunning =====
 
-@allure.epic(EPIC)
-@allure.feature(FEATURE)
-@allure.story("发动机状态-退出条件")
-@allure.title("退出条件测试_发动机状态NoRunning：加热中置位输出停止")
+@allure.title("10·退出条件测试_发动机状态NoRunning：加热中置位输出停止")
 @allure.severity(allure.severity_level.CRITICAL)
 def test_10_engine_exit_not_running(bench):
     """退出NoRunning：请求三档→1s→采集(加热中)→置状态→3s→采集→判定停止"""
@@ -269,10 +246,7 @@ def test_10_engine_exit_not_running(bench):
 
 # ===== dump 11：暂停条件测试_发动机状态Crank =====
 
-@allure.epic(EPIC)
-@allure.feature(FEATURE)
-@allure.story("发动机状态-暂停条件")
-@allure.title("暂停条件测试_发动机状态Crank：硬线断开但CAN保持档位")
+@allure.title("11·暂停条件测试_发动机状态Crank：硬线断开但CAN保持档位")
 @allure.severity(allure.severity_level.NORMAL)
 def test_11_engine_crank_pauses(bench):
     """暂停Crank：请求三档→1s→采集(加热中)→置Crank→3s→采集→判定暂停"""
@@ -295,10 +269,7 @@ def test_11_engine_crank_pauses(bench):
 
 # ===== dump 12：退出条件测试_发动机状态Fault =====
 
-@allure.epic(EPIC)
-@allure.feature(FEATURE)
-@allure.story("发动机状态-退出条件")
-@allure.title("退出条件测试_发动机状态Fault：加热中置位输出停止")
+@allure.title("12·退出条件测试_发动机状态Fault：加热中置位输出停止")
 @allure.severity(allure.severity_level.CRITICAL)
 def test_12_engine_exit_fault(bench):
     """退出Fault：请求三档→1s→采集(加热中)→置状态→3s→采集→判定停止"""
@@ -321,10 +292,7 @@ def test_12_engine_exit_fault(bench):
 
 # ===== dump 13~16：前提条件测试-点火开关（OFF/ACC/Crank+IG/Error） =====
 
-@allure.epic(EPIC)
-@allure.feature(FEATURE)
-@allure.story("点火开关-前提条件")
-@allure.title("前提条件测试-点火开关{case}挡")
+@allure.title("13·前提条件测试-点火开关{case}挡")
 @allure.severity(allure.severity_level.CRITICAL)
 @pytest.mark.parametrize("case,key_state,ign_valid,expect", IGNITION_PRECONDITIONS,
                          ids=[p[0] for p in IGNITION_PRECONDITIONS])
@@ -345,10 +313,7 @@ def test_13_ignition_blocks(bench, case, key_state, ign_valid, expect):
 
 # ===== dump 17~19：退出条件测试-点火开关（OFF/ACC/Error） =====
 
-@allure.epic(EPIC)
-@allure.feature(FEATURE)
-@allure.story("点火开关-退出条件")
-@allure.title("退出条件测试-点火开关{case}挡")
+@allure.title("17·退出条件测试-点火开关{case}挡")
 @allure.severity(allure.severity_level.CRITICAL)
 @pytest.mark.parametrize("case,key_state,ign_valid,pre_wait", IGNITION_EXITS,
                          ids=[p[0] for p in IGNITION_EXITS])
@@ -373,10 +338,7 @@ def test_17_ignition_exits(bench, case, key_state, ign_valid, pre_wait):
 
 # ===== dump 20~22：前提条件测试-NTC（短地/短电源/开路，CH7） =====
 
-@allure.epic(EPIC)
-@allure.feature(FEATURE)
-@allure.story("NTC故障-前提条件")
-@allure.title("前提条件测试-NTC{fault}：抑制加热（CH7）")
+@allure.title("20·前提条件测试-NTC{fault}：抑制加热（CH7）")
 @allure.severity(allure.severity_level.CRITICAL)
 @pytest.mark.parametrize("kind,fault", NTC_FAULTS, ids=[f[0] for f in NTC_FAULTS])
 def test_20_ntc_blocks(bench, kind, fault):
@@ -398,10 +360,7 @@ def test_20_ntc_blocks(bench, kind, fault):
 
 # ===== dump 23~25：退出条件测试-NTC（短地/短电源/开路，CH7） =====
 
-@allure.epic(EPIC)
-@allure.feature(FEATURE)
-@allure.story("NTC故障-退出条件")
-@allure.title("退出条件测试-NTC{fault}：加热中注入输出停止（CH7）")
+@allure.title("23·退出条件测试-NTC{fault}：加热中注入输出停止（CH7）")
 @allure.severity(allure.severity_level.CRITICAL)
 @pytest.mark.parametrize("kind,fault", NTC_FAULTS, ids=[f[0] for f in NTC_FAULTS])
 def test_23_ntc_exits(bench, kind, fault):
@@ -429,10 +388,7 @@ def test_23_ntc_exits(bench, kind, fault):
 
 @pytest.mark.xfail(strict=True,
                    reason="复现存量缺陷：2026-11-03 历史实测 hard=1/CAN=4，期望 0/1（判定与原文一致，不放宽）")
-@allure.epic(EPIC)
-@allure.feature(FEATURE)
-@allure.story("输出故障-前提条件")
-@allure.title("前提条件测试-加热输出短地：抑制加热")
+@allure.title("26·前提条件测试-加热输出短地：抑制加热")
 @allure.severity(allure.severity_level.CRITICAL)
 def test_26_out_short_blocks(bench):
     """前提输出短地：初始化→注入短地→1s→请求三档→3s→采集→判定（存量历史 Failed，复现）"""
@@ -453,10 +409,7 @@ def test_26_out_short_blocks(bench):
 
 @pytest.mark.xfail(strict=True,
                    reason="复现存量缺陷：2026-11-03 历史实测 hard=1/CAN=4，期望 0/1（判定与原文一致，不放宽）")
-@allure.epic(EPIC)
-@allure.feature(FEATURE)
-@allure.story("输出故障-退出条件")
-@allure.title("退出条件测试-加热输出短地：加热中注入输出停止")
+@allure.title("28·退出条件测试-加热输出短地：加热中注入输出停止")
 @allure.severity(allure.severity_level.CRITICAL)
 def test_28_out_short_exit(bench):
     """退出输出短地：请求三档→1s→采集(加热中)→注入短地→5s→采集→判定（存量历史 Failed，复现）"""
@@ -479,10 +432,7 @@ def test_28_out_short_exit(bench):
 
 # ===== dump 30~32：触发条件测试-加热三/二/一档（参数序照抄 dump） =====
 
-@allure.epic(EPIC)
-@allure.feature(FEATURE)
-@allure.story("触发条件")
-@allure.title("触发条件测试-{level}")
+@allure.title("30·触发条件测试-{level}")
 @allure.severity(allure.severity_level.CRITICAL)
 @pytest.mark.parametrize("level", ["level3", "level2", "level1"])   # dump 序：三(30)→二(31)→一(32)
 def test_30_trigger_level(bench, level):
@@ -499,10 +449,7 @@ def test_30_trigger_level(bench, level):
 
 # ===== dump 33：触发条件测试-加热OFF =====
 
-@allure.epic(EPIC)
-@allure.feature(FEATURE)
-@allure.story("触发条件")
-@allure.title("触发条件测试-加热OFF")
+@allure.title("33·触发条件测试-加热OFF")
 @allure.severity(allure.severity_level.NORMAL)
 def test_33_trigger_off(bench):
     """触发OFF：先验证三档加热中，再按原文 OFF 链（写 OFF=1 → 无请求）验证停止。
@@ -529,10 +476,7 @@ def test_33_trigger_off(bench):
 
 # ===== dump 37：故障恢复测试-NTC短地（CH9） =====
 
-@allure.epic(EPIC)
-@allure.feature(FEATURE)
-@allure.story("故障恢复")
-@allure.title("故障恢复测试-NTC短地")
+@allure.title("37·故障恢复测试-NTC短地")
 @allure.severity(allure.severity_level.NORMAL)
 def test_37_recovery_ntc_short_gnd(bench):
     """NTC短地恢复：三档→注入(CH9,14)→3s→取消→2s→开关重触发→判定恢复正常"""
@@ -559,10 +503,7 @@ def test_37_recovery_ntc_short_gnd(bench):
 
 # ===== dump 38：故障恢复测试-NTC开路（CH9） =====
 
-@allure.epic(EPIC)
-@allure.feature(FEATURE)
-@allure.story("故障恢复")
-@allure.title("故障恢复测试-NTC开路")
+@allure.title("38·故障恢复测试-NTC开路")
 @allure.severity(allure.severity_level.NORMAL)
 def test_38_recovery_ntc_open(bench):
     """NTC开路恢复：三档→注入(CH9,8)→3s→取消→1s→开关重触发→判定恢复"""
@@ -585,10 +526,7 @@ def test_38_recovery_ntc_open(bench):
 
 # ===== dump 41：故障恢复测试-欠压 =====
 
-@allure.epic(EPIC)
-@allure.feature(FEATURE)
-@allure.story("故障恢复")
-@allure.title("故障恢复测试-欠压故障")
+@allure.title("41·故障恢复测试-欠压故障")
 @allure.severity(allure.severity_level.NORMAL)
 def test_41_recovery_undervoltage(bench):
     """欠压恢复：三档→自检→8.4V×3.5s→自检关→回13.5V→自检仍关→重请求→恢复三档
@@ -629,10 +567,7 @@ def test_41_recovery_undervoltage(bench):
 
 # ===== dump 42：故障恢复测试-过压（xfail 已摘：3.5s 新工况 3/3 稳定通过，用户拍板 2026-11-07） =====
 
-@allure.epic(EPIC)
-@allure.feature(FEATURE)
-@allure.story("故障恢复")
-@allure.title("故障恢复测试-过压故障")
+@allure.title("42·故障恢复测试-过压故障")
 @allure.severity(allure.severity_level.NORMAL)
 def test_42_recovery_overvoltage(bench):
     """过压恢复：三档→自检→17V×3.5s→回13.5V→1.5s→重请求→恢复三档
