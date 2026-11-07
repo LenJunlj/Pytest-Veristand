@@ -104,8 +104,8 @@ def main(sdf, outdir):
                      "", lay, "", ""])
     def layer_hw(p):
         if "/DAQ/" in p: return "台架层(DAQ)"
-        if "CAN/ECU/" in p: return "项目层(DUT CAN)"
-        if "CAN1/" in p: return "台架层(CAN1内部总线)"
+        if "NI-XNET/CAN/CAN1/" in p: return "台架层(CAN1内部总线)"
+        if "NI-XNET/CAN/" in p: return "项目层(DUT CAN)"  # CAN1 之外的 XNET 端口=接 DUT 的总线(项目接线事实:p2546=ECU口,C026-10=CAN2口)
         return "台架层"
     for h in all_hw:
         p = h["path"]
