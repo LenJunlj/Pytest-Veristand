@@ -1,0 +1,640 @@
+# -*- coding: utf-8 -*-
+r"""P2546 左后大屏加热 —— 全部用例单文件（2026-11-07 由 6 个分主题文件合并）
+
+**顺序规则（用户拍板）：函数按 dump 序号升序定义，执行顺序 = 文件内定义顺序 =
+存量 .seq 序列顺序**。函数名 test_<NN>_XXX，NN = dump 序列号
+（reports/P2546_左后大屏加热_dump.json / gen_manifest.md 一一对应），
+缺号 = 整序列 Skip 未翻译（27/29 输出开路前提退出、34~36 控温已删、39/40 输出故障恢复待拍板、43 40min 已删）。
+后续用例 Excel / mapping 按序号对照排查。
+
+判定语义（全项目统一）：EQ 精确等值（实测 == Limits.Low，High=11 是模板残留不参与）。
+
+── 11 项闭环清单（2026-11-06 评审，三源交叉验证：结构化 dump + TestStand 历史报告实测值 + interop RunMode）──
+ 1. LED 三项判定：原文 174/174 全 Skip 且 FileGlobals.LEDHeat* 从未写 → 不翻译。
+ 2. 限值表达式引用 FileGlobals.VOLT：未定义（存量缺陷）→ 不翻译。
+ 3. 控温逻辑三条：整序列 Skip + CAN 下限全 4（存量缺陷）→ 用户拍板删除。
+ 4. 触发-OFF 第二组"CAN∈[1,11]"实为 CAN == 1（EQ 语义，OFF 编码）。
+ 5. 触发-OFF 等待：写 OFF=1(1s)→无请求(1s)+外层 1s，撤请求后共 2s。
+ 6. NTC 通道分工：前提/退出系列用 CH7，故障恢复系列用 CH9（照抄存量，勿统一）。
+ 7. bench_shutdown 的"撤加热"是安全增量保留（原文无此步）。
+ 8. 硬线采集通道：存量误写 DI1（恒 0），实际 DI0，已修。
+ 9. 判定语义 EQ：旧区间翻译会放过档位错误 → 精确等值。
+10. 加热请求编码：0=无请求（保持）/ 1=OFF / 2/3/4=一/二/三档（OFF≠0）。
+11. 库序列"加热X档请求"自带 2s 内部等待（写档位→1s→无请求→1s），漏掉会提前采样
+    （实测 8.5V 欠压下 DUT 在请求后 3~6s 才切断，原文按 6s 采样）→ 一律用 bench.request_heat()。
+
+其他批次要点：
+- 发动机状态编码：0=NotRunning / 1=Running / 2=Crank / 3=Fault；步骤名统一叫 Running 是改名遗漏，按写入值。
+  暂停语义（Crank）：硬线断开但 CAN 保持档位（hard==0, CAN==4）。
+- 电源模式编码：OFF=0 / ACC=1 / ON=2 / CRANK+IG=3 / Error=7；每条同步写硬线 IGN（仅 CRANK+IG 有效=1）。
+  退出-OFF 置挡前等 3s，ACC/Error 只等 1s（照抄原文时序差异）。
+- NTC 注入值：短地=14 / 短电源=12 / 开路=8；前提/退出在断言后清 CH7（原文 Main 末步，防泄漏）。
+- 输出故障：短地 = FIU1_CH10=2 + CH1=1；原文"取消"只清 CH1（CH10 泄漏是存量缺陷，复位已统一全清）。
+  前提/退出-输出短地历史实测 Failed（hard=1/CAN=4）→ xfail(strict) 复现存量缺陷。
+- 故障恢复-过压：步骤名从欠压复制忘改（名"8V"写 17、名"17V"写 13.5），按写入值实现；
+  DUT 恢复行为不稳定（2026-11-07 同日三测两态，隔离执行仍不同 → 与残留无关），
+  用户拍板保持 xfail(strict)：间歇 XPASS=FAILED 视为 DUT 行为变化信号。
+"""
+import time
+
+import allure
+import pytest
+
+from projects.p2546.common.checks import assert_outputs
+
+pytestmark = pytest.mark.hil
+
+EPIC = "P2546 HIL 测试"
+FEATURE = "左后大屏加热"
+
+# (hard 期望, CAN 期望) —— EQ 语义（实测 == Limits.Low）
+HEATING_ON = (1.0, 4.0)      # 三档正常加热
+SUPPRESSED = (0.0, 1.0)      # 被抑制/停止（CAN=1 是 OFF 编码）
+PAUSED = (0.0, 4.0)          # 暂停：硬线断开，CAN 仍报三档
+TRIGGER_SPECS = {            # 触发档位 → (hard, CAN)
+    "level3": (1.0, 4.0),
+    "level2": (1.0, 3.0),
+    "level1": (1.0, 2.0),
+}
+
+# 点火（id, KeyState, IGN 有效, 期望输出）
+IGNITION_PRECONDITIONS = [
+    ("off", 0.0, False, SUPPRESSED),
+    ("acc", 1.0, False, SUPPRESSED),
+    ("crank_ig", 3.0, True, HEATING_ON),
+    ("error", 7.0, False, SUPPRESSED),
+]
+# 点火退出（id, KeyState, IGN 有效, 置挡前等待秒数）—— 原文 OFF 等 3s，ACC/Error 等 1s
+IGNITION_EXITS = [
+    ("off", 0.0, False, 3),
+    ("acc", 1.0, False, 1),
+    ("error", 7.0, False, 1),
+]
+
+# NTC 故障（kind, 中文名）—— CH7 前提/退出系列
+NTC_FAULTS = [("short_gnd", "短地"), ("short_vcc", "短电源"), ("open", "开路")]
+
+
+# ===== dump 1：前提条件测试_欠压 =====
+
+@allure.epic(EPIC)
+@allure.feature(FEATURE)
+@allure.story("欠压保护")
+@allure.title("前提条件测试_欠压：8.5V 抑制加热")
+@allure.severity(allure.severity_level.CRITICAL)
+def test_01_undervoltage_inhibits(bench):
+    """前提欠压：8.5V 下请求三档 → 输出被抑制（hard==0, CAN==1）"""
+    with allure.step("降电源电压至 8.5V（欠压工况）"):
+        bench.set_supply_voltage(8.5)
+        time.sleep(1)
+    with allure.step("在欠压下调三档加热请求"):
+        bench.request_heat("level3")
+        time.sleep(3)
+        out = bench.read_heat_outputs()
+        time.sleep(1)
+    with allure.step("判定输出被抑制（hard==0, CAN==1）"):
+        assert_outputs(out, *SUPPRESSED)
+
+
+# ===== dump 2：前提条件测试_过压 =====
+
+@allure.epic(EPIC)
+@allure.feature(FEATURE)
+@allure.story("过压保护")
+@allure.title("前提条件测试_过压：17V 抑制加热")
+@allure.severity(allure.severity_level.CRITICAL)
+def test_02_overvoltage_blocks(bench):
+    """前提过压：初始化→17V→1s→请求三档→3s→采集→判定输出被抑制"""
+    with allure.step("升电源电压至 17V（过压工况）并等待 1s"):
+        bench.set_supply_voltage(17.0)
+        time.sleep(1)
+    with allure.step("在过压下请求三档加热（库序列含 2s）"):
+        bench.request_heat("level3")
+    with allure.step("等待 3s 后采集输出"):
+        time.sleep(3)
+        out = bench.read_heat_outputs()
+        time.sleep(1)
+    with allure.step("判定输出被抑制（hard==0, CAN==1）"):
+        assert_outputs(out, *SUPPRESSED)
+
+
+# ===== dump 3：退出条件测试_欠压 =====
+
+@allure.epic(EPIC)
+@allure.feature(FEATURE)
+@allure.story("欠压保护")
+@allure.title("退出条件测试_欠压：加热中降 8.5V 输出停止")
+@allure.severity(allure.severity_level.CRITICAL)
+def test_03_undervoltage_exit(bench):
+    """退出欠压：正常电压加热中 → 降 8.5V → 5s → 输出停止"""
+    with allure.step("正常电压下请求三档并确认加热中"):
+        bench.request_heat("level3")                      # 库序列内部 2s
+        time.sleep(1)
+        out1 = bench.read_heat_outputs()
+        time.sleep(1)
+        assert_outputs(out1, *HEATING_ON)
+
+    with allure.step("降电压至 8.5V 并等待 5s"):
+        time.sleep(1)
+        bench.set_supply_voltage(8.5)
+        time.sleep(5)
+        out2 = bench.read_heat_outputs()
+        time.sleep(1)
+    with allure.step("判定欠压后输出停止（hard==0, CAN==1）"):
+        assert_outputs(out2, *SUPPRESSED)
+
+
+# ===== dump 4：退出条件测试_过压 =====
+
+@allure.epic(EPIC)
+@allure.feature(FEATURE)
+@allure.story("过压保护")
+@allure.title("退出条件测试_过压：加热中升 17V 输出停止")
+@allure.severity(allure.severity_level.CRITICAL)
+def test_04_overvoltage_exit(bench):
+    """退出过压：请求三档→1s→采集(加热中)→升 17V→5s→采集→判定停止"""
+    with allure.step("请求三档并确认加热中"):
+        bench.request_heat("level3")                      # 库序列内部 2s
+        time.sleep(1)
+        out1 = bench.read_heat_outputs()
+        time.sleep(1)
+        assert_outputs(out1, *HEATING_ON)
+
+    with allure.step("升电压至 17V 并等待 5s"):
+        time.sleep(1)
+        bench.set_supply_voltage(17.0)
+        time.sleep(5)
+        out2 = bench.read_heat_outputs()
+        time.sleep(1)
+    with allure.step("判定过压后输出停止（hard==0, CAN==1）"):
+        assert_outputs(out2, *SUPPRESSED)
+
+
+# ===== dump 5：前提条件测试_整车碰撞 =====
+
+@allure.epic(EPIC)
+@allure.feature(FEATURE)
+@allure.story("碰撞保护")
+@allure.title("前提条件测试_整车碰撞：碰撞置位抑制加热")
+@allure.severity(allure.severity_level.CRITICAL)
+def test_05_crash_blocks(bench):
+    """前提碰撞：初始化→碰撞=1→1s→请求三档→3s→采集→判定被抑制"""
+    with allure.step("置整车碰撞信号 = 1 并等待 1s"):
+        bench.set_crash(True)
+        time.sleep(1)
+    with allure.step("在碰撞工况下请求三档加热（库序列含 2s）"):
+        bench.request_heat("level3")
+    with allure.step("等待 3s 后采集输出"):
+        time.sleep(3)
+        out = bench.read_heat_outputs()
+        time.sleep(1)
+    with allure.step("判定输出被抑制（hard==0, CAN==1）"):
+        assert_outputs(out, *SUPPRESSED)
+
+
+# ===== dump 6：退出条件测试_整车碰撞 =====
+
+@allure.epic(EPIC)
+@allure.feature(FEATURE)
+@allure.story("碰撞保护")
+@allure.title("退出条件测试_整车碰撞：加热中置碰撞输出停止")
+@allure.severity(allure.severity_level.CRITICAL)
+def test_06_crash_exit(bench):
+    """退出碰撞：请求三档→1s→采集(加热中)→碰撞=1→3s→采集→判定停止"""
+    with allure.step("请求三档并确认加热中"):
+        bench.request_heat("level3")                      # 库序列内部 2s
+        time.sleep(1)
+        out1 = bench.read_heat_outputs()
+        time.sleep(1)
+        assert_outputs(out1, *HEATING_ON)
+
+    with allure.step("置整车碰撞信号并等待 3s"):
+        time.sleep(1)
+        bench.set_crash(True)
+        time.sleep(3)
+        out2 = bench.read_heat_outputs()
+        time.sleep(1)
+    with allure.step("判定碰撞后输出停止（hard==0, CAN==1）"):
+        assert_outputs(out2, *SUPPRESSED)
+
+
+# ===== dump 7~9：前提条件测试_发动机状态（NotRunning/Crank/Fault） =====
+
+@allure.epic(EPIC)
+@allure.feature(FEATURE)
+@allure.story("发动机状态-前提条件")
+@allure.title("前提条件测试_发动机状态{state}：抑制加热")
+@allure.severity(allure.severity_level.CRITICAL)
+@pytest.mark.parametrize("state", ["not_running", "crank", "fault"])
+def test_07_engine_blocks(bench, state):
+    """前提发动机状态：初始化→置状态→1s→请求三档→3s→采集→判定被抑制"""
+    with allure.step(f"置发动机状态 {state} 并等待 1s"):
+        bench.set_engine_state(state)
+        time.sleep(1)
+    with allure.step("请求三档加热（库序列含 2s）"):
+        bench.request_heat("level3")
+    with allure.step("等待 3s 后采集输出"):
+        time.sleep(3)
+        out = bench.read_heat_outputs()
+        time.sleep(1)
+    with allure.step("判定输出被抑制（hard==0, CAN==1）"):
+        assert_outputs(out, *SUPPRESSED)
+
+
+# ===== dump 10：退出条件测试_发动机状态NoRunning =====
+
+@allure.epic(EPIC)
+@allure.feature(FEATURE)
+@allure.story("发动机状态-退出条件")
+@allure.title("退出条件测试_发动机状态NoRunning：加热中置位输出停止")
+@allure.severity(allure.severity_level.CRITICAL)
+def test_10_engine_exit_not_running(bench):
+    """退出NoRunning：请求三档→1s→采集(加热中)→置状态→3s→采集→判定停止"""
+    with allure.step("请求三档并确认加热中"):
+        bench.request_heat("level3")                      # 库序列内部 2s
+        time.sleep(1)
+        out1 = bench.read_heat_outputs()
+        time.sleep(1)
+        assert_outputs(out1, *HEATING_ON)
+
+    with allure.step("置发动机状态 not_running 并等待 3s"):
+        time.sleep(3)
+        bench.set_engine_state("not_running")
+        time.sleep(3)
+        out2 = bench.read_heat_outputs()
+        time.sleep(1)
+    with allure.step("判定输出停止（hard==0, CAN==1）"):
+        assert_outputs(out2, *SUPPRESSED)
+
+
+# ===== dump 11：暂停条件测试_发动机状态Crank =====
+
+@allure.epic(EPIC)
+@allure.feature(FEATURE)
+@allure.story("发动机状态-暂停条件")
+@allure.title("暂停条件测试_发动机状态Crank：硬线断开但CAN保持档位")
+@allure.severity(allure.severity_level.NORMAL)
+def test_11_engine_crank_pauses(bench):
+    """暂停Crank：请求三档→1s→采集(加热中)→置Crank→3s→采集→判定暂停"""
+    with allure.step("请求三档并确认加热中"):
+        bench.request_heat("level3")                      # 库序列内部 2s
+        time.sleep(1)
+        out1 = bench.read_heat_outputs()
+        time.sleep(1)
+        assert_outputs(out1, *HEATING_ON)
+
+    with allure.step("置发动机状态 Crank 并等待 3s"):
+        time.sleep(3)
+        bench.set_engine_state("crank")
+        time.sleep(3)
+        out2 = bench.read_heat_outputs()
+        time.sleep(1)
+    with allure.step("判定暂停（hard==0, CAN==4 保持档位）"):
+        assert_outputs(out2, *PAUSED)
+
+
+# ===== dump 12：退出条件测试_发动机状态Fault =====
+
+@allure.epic(EPIC)
+@allure.feature(FEATURE)
+@allure.story("发动机状态-退出条件")
+@allure.title("退出条件测试_发动机状态Fault：加热中置位输出停止")
+@allure.severity(allure.severity_level.CRITICAL)
+def test_12_engine_exit_fault(bench):
+    """退出Fault：请求三档→1s→采集(加热中)→置状态→3s→采集→判定停止"""
+    with allure.step("请求三档并确认加热中"):
+        bench.request_heat("level3")                      # 库序列内部 2s
+        time.sleep(1)
+        out1 = bench.read_heat_outputs()
+        time.sleep(1)
+        assert_outputs(out1, *HEATING_ON)
+
+    with allure.step("置发动机状态 fault 并等待 3s"):
+        time.sleep(3)
+        bench.set_engine_state("fault")
+        time.sleep(3)
+        out2 = bench.read_heat_outputs()
+        time.sleep(1)
+    with allure.step("判定输出停止（hard==0, CAN==1）"):
+        assert_outputs(out2, *SUPPRESSED)
+
+
+# ===== dump 13~16：前提条件测试-点火开关（OFF/ACC/Crank+IG/Error） =====
+
+@allure.epic(EPIC)
+@allure.feature(FEATURE)
+@allure.story("点火开关-前提条件")
+@allure.title("前提条件测试-点火开关{case}挡")
+@allure.severity(allure.severity_level.CRITICAL)
+@pytest.mark.parametrize("case,key_state,ign_valid,expect", IGNITION_PRECONDITIONS,
+                         ids=[p[0] for p in IGNITION_PRECONDITIONS])
+def test_13_ignition_blocks(bench, case, key_state, ign_valid, expect):
+    """前提点火挡：初始化→置电源模式→1s→请求三档→3s→采集→判定"""
+    with allure.step(f"置电源模式 {case}（KeyState={key_state:g}, IGN={'有效' if ign_valid else '无效'}）"):
+        bench.set_power_mode(key_state, ign_valid)
+        time.sleep(1)
+    with allure.step("请求三档加热（库序列含 2s）"):
+        bench.request_heat("level3")
+    with allure.step("等待 3s 后采集输出"):
+        time.sleep(3)
+        out = bench.read_heat_outputs()
+        time.sleep(1)
+    with allure.step(f"判定输出（hard=={expect[0]:g}, CAN=={expect[1]:g}）"):
+        assert_outputs(out, *expect)
+
+
+# ===== dump 17~19：退出条件测试-点火开关（OFF/ACC/Error） =====
+
+@allure.epic(EPIC)
+@allure.feature(FEATURE)
+@allure.story("点火开关-退出条件")
+@allure.title("退出条件测试-点火开关{case}挡")
+@allure.severity(allure.severity_level.CRITICAL)
+@pytest.mark.parametrize("case,key_state,ign_valid,pre_wait", IGNITION_EXITS,
+                         ids=[p[0] for p in IGNITION_EXITS])
+def test_17_ignition_exits(bench, case, key_state, ign_valid, pre_wait):
+    """退点点火挡：请求三档→1s→采集(加热中)→置挡→3s→采集→判定停止"""
+    with allure.step("请求三档并确认加热中"):
+        bench.request_heat("level3")                      # 库序列内部 2s
+        time.sleep(1)
+        out1 = bench.read_heat_outputs()
+        time.sleep(1)
+        assert_outputs(out1, *HEATING_ON)
+
+    with allure.step(f"置电源模式 {case}（置挡前等待 {pre_wait}s，照抄原文）并等待 3s"):
+        time.sleep(pre_wait)
+        bench.set_power_mode(key_state, ign_valid)
+        time.sleep(3)
+        out2 = bench.read_heat_outputs()
+        time.sleep(1)
+    with allure.step("判定输出停止（hard==0, CAN==1）"):
+        assert_outputs(out2, *SUPPRESSED)
+
+
+# ===== dump 20~22：前提条件测试-NTC（短地/短电源/开路，CH7） =====
+
+@allure.epic(EPIC)
+@allure.feature(FEATURE)
+@allure.story("NTC故障-前提条件")
+@allure.title("前提条件测试-NTC{fault}：抑制加热（CH7）")
+@allure.severity(allure.severity_level.CRITICAL)
+@pytest.mark.parametrize("kind,fault", NTC_FAULTS, ids=[f[0] for f in NTC_FAULTS])
+def test_20_ntc_blocks(bench, kind, fault):
+    """前提NTC：初始化→注入(CH7)→1s→请求三档→3s→采集→判定被抑制→清除"""
+    with allure.step(f"注入 NTC {fault}（FIU3_CH7）并等待 1s"):
+        bench.inject_ntc_fault(kind, ch="ch7")
+        time.sleep(1)
+    with allure.step("请求三档加热（库序列含 2s）"):
+        bench.request_heat("level3")
+    with allure.step("等待 3s 后采集输出"):
+        time.sleep(3)
+        out = bench.read_heat_outputs()
+        time.sleep(1)
+    with allure.step("判定输出被抑制（hard==0, CAN==1）"):
+        assert_outputs(out, *SUPPRESSED)
+    with allure.step("清除 NTC 故障（原文 Main 末步）"):
+        bench.clear_ntc_fault(ch="ch7")
+
+
+# ===== dump 23~25：退出条件测试-NTC（短地/短电源/开路，CH7） =====
+
+@allure.epic(EPIC)
+@allure.feature(FEATURE)
+@allure.story("NTC故障-退出条件")
+@allure.title("退出条件测试-NTC{fault}：加热中注入输出停止（CH7）")
+@allure.severity(allure.severity_level.CRITICAL)
+@pytest.mark.parametrize("kind,fault", NTC_FAULTS, ids=[f[0] for f in NTC_FAULTS])
+def test_23_ntc_exits(bench, kind, fault):
+    """退出NTC：请求三档→1s→采集(加热中)→注入(CH7)→3s→采集→判定停止→清除"""
+    with allure.step("请求三档并确认加热中"):
+        bench.request_heat("level3")                      # 库序列内部 2s
+        time.sleep(1)
+        out1 = bench.read_heat_outputs()
+        time.sleep(1)
+        assert_outputs(out1, *HEATING_ON)
+
+    with allure.step(f"注入 NTC {fault}（FIU3_CH7）并等待 3s"):
+        time.sleep(1)
+        bench.inject_ntc_fault(kind, ch="ch7")
+        time.sleep(3)
+        out2 = bench.read_heat_outputs()
+        time.sleep(1)
+    with allure.step("判定输出停止（hard==0, CAN==1）"):
+        assert_outputs(out2, *SUPPRESSED)
+    with allure.step("清除 NTC 故障（原文 Main 末步）"):
+        bench.clear_ntc_fault(ch="ch7")
+
+
+# ===== dump 26：前提条件测试-加热输出短地（xfail：复现存量缺陷） =====
+
+@pytest.mark.xfail(strict=True,
+                   reason="复现存量缺陷：2026-11-03 历史实测 hard=1/CAN=4，期望 0/1（判定与原文一致，不放宽）")
+@allure.epic(EPIC)
+@allure.feature(FEATURE)
+@allure.story("输出故障-前提条件")
+@allure.title("前提条件测试-加热输出短地：抑制加热")
+@allure.severity(allure.severity_level.CRITICAL)
+def test_26_out_short_blocks(bench):
+    """前提输出短地：初始化→注入短地→1s→请求三档→3s→采集→判定（存量历史 Failed，复现）"""
+    with allure.step("注入加热输出短地（FIU1_CH10=2, CH1=1）并等待 1s"):
+        bench.inject_out_fault("short_gnd")
+        time.sleep(1)
+    with allure.step("请求三档加热（库序列含 2s）"):
+        bench.request_heat("level3")
+    with allure.step("等待 3s 后采集输出"):
+        time.sleep(3)
+        out = bench.read_heat_outputs()
+        time.sleep(1)
+    with allure.step("判定输出被抑制（hard==0, CAN==1）"):
+        assert_outputs(out, *SUPPRESSED)
+
+
+# ===== dump 28：退出条件测试-加热输出短地（xfail：复现存量缺陷） =====
+
+@pytest.mark.xfail(strict=True,
+                   reason="复现存量缺陷：2026-11-03 历史实测 hard=1/CAN=4，期望 0/1（判定与原文一致，不放宽）")
+@allure.epic(EPIC)
+@allure.feature(FEATURE)
+@allure.story("输出故障-退出条件")
+@allure.title("退出条件测试-加热输出短地：加热中注入输出停止")
+@allure.severity(allure.severity_level.CRITICAL)
+def test_28_out_short_exit(bench):
+    """退出输出短地：请求三档→1s→采集(加热中)→注入短地→5s→采集→判定（存量历史 Failed，复现）"""
+    with allure.step("请求三档并确认加热中"):
+        bench.request_heat("level3")                      # 库序列内部 2s
+        time.sleep(1)
+        out1 = bench.read_heat_outputs()
+        time.sleep(1)
+        assert_outputs(out1, *HEATING_ON)
+
+    with allure.step("注入加热输出短地并等待 5s（原文 Wait5s）"):
+        time.sleep(3)
+        bench.inject_out_fault("short_gnd")
+        time.sleep(5)
+        out2 = bench.read_heat_outputs()
+        time.sleep(1)
+    with allure.step("判定输出停止（hard==0, CAN==1）"):
+        assert_outputs(out2, *SUPPRESSED)
+
+
+# ===== dump 30~32：触发条件测试-加热三/二/一档（参数序照抄 dump） =====
+
+@allure.epic(EPIC)
+@allure.feature(FEATURE)
+@allure.story("触发条件")
+@allure.title("触发条件测试-{level}")
+@allure.severity(allure.severity_level.CRITICAL)
+@pytest.mark.parametrize("level", ["level3", "level2", "level1"])   # dump 序：三(30)→二(31)→一(32)
+def test_30_trigger_level(bench, level):
+    """触发档位：初始化→档位请求→3s→采集→1s→判定"""
+    with allure.step(f"设置加热请求 {level}（库序列：写档位→1s→无请求→1s）"):
+        bench.request_heat(level)
+    with allure.step("等待 3s 后采集硬线/CAN 输出（原文时序）"):
+        time.sleep(3)
+        out = bench.read_heat_outputs()
+        time.sleep(1)
+    with allure.step("判定输出（精确等值）"):
+        assert_outputs(out, *TRIGGER_SPECS[level])
+
+
+# ===== dump 33：触发条件测试-加热OFF =====
+
+@allure.epic(EPIC)
+@allure.feature(FEATURE)
+@allure.story("触发条件")
+@allure.title("触发条件测试-加热OFF")
+@allure.severity(allure.severity_level.NORMAL)
+def test_33_trigger_off(bench):
+    """触发OFF：先验证三档加热中，再按原文 OFF 链（写 OFF=1 → 无请求）验证停止。
+    原文"加热OFF"序列首步名为"加热一档请求"，实际写 1（OFF）——复制库序列改值忘改名。"""
+    with allure.step("设置三档请求并确认加热中"):
+        bench.request_heat("level3")
+        time.sleep(3)
+        out1 = bench.read_heat_outputs()
+        time.sleep(1)
+        assert_outputs(out1, *TRIGGER_SPECS["level3"])   # 原文第一组：三档状态
+
+    with allure.step("按原文执行 OFF 链：写 OFF=1 → 1s → 无请求 → 1s"):
+        time.sleep(1)                                     # 原文判定后 Wait 1s
+        bench.set_heat_request("off")
+        time.sleep(1)                                     # 库序列"加热OFF"内部 Wait
+        bench.no_heat_request()
+        time.sleep(1)                                     # 库序列"加热OFF"内部 Wait
+        time.sleep(1)                                     # 外层 Wait1s（原文）→ 撤请求后共 2s
+        out2 = bench.read_heat_outputs()
+        time.sleep(1)
+    with allure.step("判定 OFF 后输出停止（hard==0, CAN==1）"):
+        assert_outputs(out2, *SUPPRESSED)                 # 原文第二组：OFF 后
+
+
+# ===== dump 37：故障恢复测试-NTC短地（CH9） =====
+
+@allure.epic(EPIC)
+@allure.feature(FEATURE)
+@allure.story("故障恢复")
+@allure.title("故障恢复测试-NTC短地")
+@allure.severity(allure.severity_level.NORMAL)
+def test_37_recovery_ntc_short_gnd(bench):
+    """NTC短地恢复：三档→注入(CH9,14)→3s→取消→2s→开关重触发→判定恢复正常"""
+    with allure.step("请求三档加热"):
+        bench.request_heat("level3")                      # 库序列内部 2s
+        time.sleep(1)
+    with allure.step("加热开启"):
+        out = bench.read_heat_outputs()
+        time.sleep(1)
+        assert_outputs(out, *HEATING_ON)
+    with allure.step("注入 NTC 短地故障（FIU3_CH9=14）"):
+        bench.inject_ntc_fault("short_gnd")
+        time.sleep(3)
+    with allure.step("取消故障注入并按压加热开关"):
+        bench.clear_ntc_fault()
+        time.sleep(2)
+        bench.heat_switch(pressed=True)
+        time.sleep(1)
+    with allure.step("采集并判定恢复后三档正常"):
+        out = bench.read_heat_outputs()
+        time.sleep(1)
+        assert_outputs(out, *HEATING_ON)
+
+
+# ===== dump 38：故障恢复测试-NTC开路（CH9） =====
+
+@allure.epic(EPIC)
+@allure.feature(FEATURE)
+@allure.story("故障恢复")
+@allure.title("故障恢复测试-NTC开路")
+@allure.severity(allure.severity_level.NORMAL)
+def test_38_recovery_ntc_open(bench):
+    """NTC开路恢复：三档→注入(CH9,8)→3s→取消→1s→开关重触发→判定恢复"""
+    with allure.step("请求三档加热"):
+        bench.request_heat("level3")                      # 库序列内部 2s
+        time.sleep(1)
+    with allure.step("注入 NTC 开路故障（FIU3_CH9=8）"):
+        bench.inject_ntc_fault("open", ch="ch9")
+        time.sleep(3)
+    with allure.step("取消故障注入并按压加热开关"):
+        bench.clear_ntc_fault(ch="ch9")
+        time.sleep(1)                                     # 原文"取消NTC开路"后 Wait1s
+        bench.heat_switch(pressed=True)
+        time.sleep(1)
+    with allure.step("采集并判定恢复后三档正常（hard==1, CAN==4）"):
+        out = bench.read_heat_outputs()
+        time.sleep(1)
+        assert_outputs(out, *HEATING_ON)
+
+
+# ===== dump 41：故障恢复测试-欠压 =====
+
+@allure.epic(EPIC)
+@allure.feature(FEATURE)
+@allure.story("故障恢复")
+@allure.title("故障恢复测试-欠压故障")
+@allure.severity(allure.severity_level.NORMAL)
+def test_41_recovery_undervoltage(bench):
+    """欠压恢复：三档→降到8V→6s→回13.5V→1s→重请求→判定恢复三档"""
+    with allure.step("请求三档加热"):
+        bench.request_heat("level3")                      # 库序列内部 2s
+        time.sleep(1)
+    with allure.step("降电源至 8V 并保持 6s（欠压故障）"):
+        bench.set_supply_voltage(8.0)
+        time.sleep(6)
+    with allure.step("恢复 13.5V 并重新请求三档"):
+        bench.set_supply_voltage(13.5)
+        time.sleep(1)
+        bench.request_heat("level3")                      # 库序列内部 2s
+        time.sleep(1)
+    with allure.step("采集并判定恢复后三档正常（hard==1, CAN==4）"):
+        out = bench.read_heat_outputs()
+        time.sleep(1)
+        assert_outputs(out, *HEATING_ON)
+
+
+# ===== dump 42：故障恢复测试-过压（xfail strict：DUT 恢复行为不稳定，用户拍板保留） =====
+
+@pytest.mark.xfail(strict=True,
+                   reason="DUT 过压恢复行为不稳定（2026-11-07 同日三测两态：全量中恢复/单条恢复/单条不恢复，"
+                          "隔离执行仍不同→与残留无关，恢复时序在采样窗口边界）。"
+                          "XPASS(FAILED) 视为 DUT 行为变化信号，用户拍板保持 strict")
+@allure.epic(EPIC)
+@allure.feature(FEATURE)
+@allure.story("故障恢复")
+@allure.title("故障恢复测试-过压故障")
+@allure.severity(allure.severity_level.NORMAL)
+def test_42_recovery_overvoltage(bench):
+    """过压恢复：三档→升17V→6s→回13.5V→1s→重请求→判定恢复三档
+    （步骤名"8V/17V"与写入值错位是存量标签残留，按写入值 17→13.5 实现）"""
+    with allure.step("请求三档加热"):
+        bench.request_heat("level3")                      # 库序列内部 2s
+        time.sleep(1)
+    with allure.step("升电源至 17V 并保持 6s（过压故障）"):
+        bench.set_supply_voltage(17.0)
+        time.sleep(6)
+    with allure.step("恢复 13.5V 并重新请求三档"):
+        bench.set_supply_voltage(13.5)
+        time.sleep(1)
+        bench.request_heat("level3")                      # 库序列内部 2s
+        time.sleep(1)
+    with allure.step("采集并判定恢复后三档正常（hard==1, CAN==4）"):
+        out = bench.read_heat_outputs()
+        time.sleep(1)
+        assert_outputs(out, *HEATING_ON)
