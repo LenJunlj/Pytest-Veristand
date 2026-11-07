@@ -1,4 +1,4 @@
-# samples/ —— TestStand 存量序列解剖区（P2 输入）
+# left_heating/samples/ —— 本项目存量序列与历史报告（只读参考）
 
 从台架机拷 2~3 个代表性 `.seq` 到本目录：
 

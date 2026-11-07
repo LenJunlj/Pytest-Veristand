@@ -37,33 +37,52 @@ def pytest_configure(config):
     alluredir = getattr(config.option, "allure_report_dir", None)
     if alluredir and not os.path.isabs(alluredir):
         config.option.allure_report_dir = os.path.join(_REPO_ROOT, alluredir)
+    # 未显式传 --alluredir（PyCharm 右键运行就是这样）时，按 bench.yaml 配置自动启用，
+    # 避免"跑了却只有 HTML 报告"。--no-allure 可关闭
+    if not alluredir and not config.getoption("--no-allure"):
+        cfg = _load_allure_cfg()
+        if cfg.get("enabled", True) is not False:
+            auto = cfg.get("results_dir", "allure-results")
+            if not os.path.isabs(auto):
+                auto = os.path.join(_REPO_ROOT, auto)
+            _clean_dir(auto)                 # 等价 --clean-alluredir，防止历史用例混入本次报告
+            config.option.allure_report_dir = auto
 
 
 def pytest_addoption(parser):
-    parser.addoption("--no-report", action="store_true", default=False,
-                     help="不自动生成 TestStand 风格 HTML 报告")
-    parser.addoption("--report-suite", default=None,
-                     help="报告套件名（默认取测试文件名）")
+    parser.addoption("--no-allure", action="store_true", default=False,
+                     help="不自动启用 Allure（默认未传 --alluredir 时也会生成）")
+
+
+def _load_allure_cfg():
+    """读 bench.yaml 的 report.allure 配置（读不到就用空配置 = 全部默认值）。"""
+    try:
+        with open(BENCH_CONFIG_PATH, "r", encoding="utf-8") as f:
+            return ((yaml.safe_load(f) or {}).get("report", {}) or {}).get("allure", {}) or {}
+    except Exception:
+        return {}
+
+
+def _clean_dir(path):
+    """清空目录内容（不删目录本身），用于每次运行前重置 allure-results。"""
+    try:
+        for name in os.listdir(path):
+            target = os.path.join(path, name)
+            if os.path.isdir(target):
+                shutil.rmtree(target, ignore_errors=True)
+            else:
+                try:
+                    os.remove(target)
+                except OSError:
+                    pass
+    except OSError:
+        pass
 
 
 def pytest_terminal_summary(terminalreporter, exitstatus, config):
-    """会话结束后自动生成报告（TestStand 风格 HTML + Allure）。
+    """会话结束后自动生成 Allure 报告（TestStand 风格 HTML 已按用户要求停用）。
     报告失败只打印提示，绝不影响测试结果与退出码。"""
-    if not config.getoption("--no-report"):
-        _generate_teststand_report(terminalreporter, config)
     _generate_allure_report(terminalreporter, config)
-
-
-def _generate_teststand_report(terminalreporter, config):
-    xml = getattr(config.option, "xmlpath", None)
-    if not xml or not os.path.exists(xml):
-        return
-    try:
-        from tools.make_report import generate
-        path = generate(xml, suite=config.getoption("--report-suite"))
-        terminalreporter.write_line("[report] HTML 报告: %s" % path)
-    except Exception as e:                      # noqa: BLE001 —— 报告不允许污染测试结论
-        terminalreporter.write_line("[report] 生成失败（不影响测试结果）: %s" % e)
 
 
 def _generate_allure_report(terminalreporter, config):
@@ -74,12 +93,7 @@ def _generate_allure_report(terminalreporter, config):
     if not (os.path.isdir(alluredir)
             and any(f.endswith(".json") for f in os.listdir(alluredir))):
         return
-    cfg = {}
-    try:
-        with open(BENCH_CONFIG_PATH, "r", encoding="utf-8") as f:
-            cfg = ((yaml.safe_load(f) or {}).get("report", {}) or {}).get("allure", {}) or {}
-    except Exception:
-        pass
+    cfg = _load_allure_cfg()
     if cfg.get("enabled", True) is False:
         return
 
@@ -116,9 +130,44 @@ def _generate_allure_report(terminalreporter, config):
 
 
 @pytest.fixture(scope="session")
-def bench_config():
+def bench_config(request):
+    """台架配置 = bench.yaml 基础 + 本次会话涉及项目的 project.yaml 覆盖。
+
+    多项目支持：projects/<项目ID>/project.yaml 的 veristand 段（system_definition、
+    model_target 等）覆盖 bench.yaml 的同名键——不同项目指向各自的 .nivssdf。
+    一次会话只允许跑一个项目（跨项目混跑会串台架配置，直接报错）。
+    """
     with open(BENCH_CONFIG_PATH, "r", encoding="utf-8") as f:
-        return yaml.safe_load(f)
+        cfg = yaml.safe_load(f)
+    roots = sorted(getattr(request.config, "_hil_project_roots", []) or [])
+    if len(roots) > 1:
+        raise pytest.UsageError(
+            "一次 pytest 会话只能跑一个项目，检出了 %s；请分开运行" % roots)
+    if roots:
+        with open(os.path.join(roots[0], "project.yaml"), "r", encoding="utf-8") as f:
+            proj = yaml.safe_load(f) or {}
+        override = proj.get("veristand") or {}
+        if override:
+            cfg["veristand"] = {**(cfg.get("veristand") or {}), **override}
+        print(f"[bench] 项目配置覆盖: {roots[0]}（veristand: {sorted(override)}）")
+    return cfg
+
+
+def pytest_collection_finish(session):
+    """收集完成后定位本次会话涉及的 project.yaml（projects/<项目ID>/ 层）。
+
+    判定规则：从每个用例文件向上找最近的 project.yaml，其所在目录即项目根。
+    框架级用例（tests/ 下，无 project.yaml 祖先）不参与。
+    """
+    import pathlib
+    roots = set()
+    for item in session.items:
+        p = pathlib.Path(str(item.fspath))
+        for anc in p.parents:
+            if (anc / "project.yaml").is_file():
+                roots.add(str(anc))
+                break
+    session.config._hil_project_roots = sorted(roots)
 
 
 @pytest.fixture(scope="session")

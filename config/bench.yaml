@@ -3,7 +3,9 @@
 
 veristand:
   gateway: "localhost"        # 远程 Gateway 支持待验证（P1 清单项），当前按台架本机运行
-  system_definition: "E:/P2546/Veristand项目/p2546.nivssdf"   # 台架真实系统定义（attach 到已部署系统）
+  # 默认系统定义（跑仓库 tests/ 框架级用例时用）；
+  # 跑 projects/<项目ID>/ 时会被该目录 project.yaml 的 veristand 段覆盖（多项目各指各的 .nivssdf）
+  system_definition: "E:/P2546/Veristand项目/p2546.nivssdf"
   mode: "attach"              # attach=附加到已部署系统（安全默认，白天人工用）
                               # deploy=完整部署（CI 夜间回归用）
   deploy_timeout_ms: 120000
@@ -11,14 +13,15 @@ veristand:
   model_target: "Controller"   # 模型所在目标名（ModelManager 参数 API 用，如 Controller）
   # 每个用例前后强制复位的安全状态（通道全路径: 值；function 级 fixture 两侧都会执行，防状态泄漏）
   # 只放"用例级激励"通道；电源/IGN/KeyState 等 bench 工况由 Stimulus.bench_ready/shutdown 管理
-  # （通道与值域照抄 helpers/stimulus.py；HIL 安全确认 2026-11-06 已通过）
+  # （通道与值域照抄 projects/p2546/common/channels.py；HIL 安全确认 2026-11-06 已通过）
   reset_channels:
-    'Targets\Controller\Simulation Models\Models\TongYu_IO\Parameters\IO\CAN IO Model\CAN BUS\MDLSoftECUDataToBus\HU_SEATSET_3F4_Msg\HU_DrvSeatHeat\Value': 0.0      # 加热请求 OFF
+    'Targets\Controller\Simulation Models\Models\TongYu_IO\Parameters\IO\CAN IO Model\CAN BUS\MDLSoftECUDataToBus\HU_SEATSET_3F4_Msg\HU_DrvSeatHeat\Value': 1.0      # 加热请求 OFF（0=无请求/1=OFF/2~4=档位）
     'Targets\Controller\Simulation Models\Models\TongYu_IO\Parameters\IO\HardLine IO Model\MDLDataToController\MDLSignalRouting\RES2\Value': 6500.0                    # NTC 常温中值
     'Targets\Controller\Simulation Models\Models\TongYu_IO\Parameters\IO\HardLine IO Model\MDLDataToController\MDLSignalRouting\DO0\Value': 0.0                        # 加热开关松开
     'Targets\Controller\Simulation Models\Models\TongYu_IO\Parameters\IO\FIU\FIU3_OUT_Channel9\Value': 0.0                                                            # NTC 故障注入取消
     'Targets\Controller\Simulation Models\Models\TongYu_IO\Parameters\IO\FIU\FIU3_OUT_Channel7\Value': 0.0                                                            # 同上（存量双通道并存，都清）
     'Targets\Controller\Simulation Models\Models\TongYu_IO\Parameters\IO\FIU\FIU1OUT_Channel1\Value': 0.0                                                             # 输出故障注入取消
+    'Targets\Controller\Simulation Models\Models\TongYu_IO\Parameters\IO\FIU\FIU1OUT_Channel10\Value': 0.0                                                            # 输出短地配合通道（原文从不复位，会污染后续用例）
 
 lock:
   path: "C:/HIL/bench.lock"   # 台架全局锁文件：本机所有使用者 + CI 必须指向同一个文件
@@ -26,9 +29,10 @@ lock:
   on_busy: "fail"             # fail=拿不到锁直接失败 / skip=跳过 hil 用例（CI 可选）
 
 report:
-  # Allure：pytest 传了 --alluredir 时，会话结束自动执行 allure generate
+  # Allure：未传 --alluredir 时（如 PyCharm 右键运行）也自动启用；--no-allure 可关闭
   allure:
     enabled: true
+    results_dir: "allure-results"                   # 原始结果目录（每次运行前自动清空）
     bin: "C:/Tools/allure-2.29.0/bin/allure.bat"   # Allure CLI（Maven Central 下载，需 Java）
     java_home: "C:/Tools/jdk-17.0.2"                # 未设置系统 JAVA_HOME 时用这个
     outdir: "allure-report"                          # 相对仓库根

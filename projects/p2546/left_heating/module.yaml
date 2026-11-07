@@ -1,0 +1,16 @@
+# left_heating —— 模块级元信息（P2546 左后大屏加热，一个 .seq 一个模块）
+# 路径相对本目录（projects/p2546/left_heating/）
+
+id: left_heating
+name: 左后大屏加热
+
+seq: samples/P2546_左后大屏加热.seq
+# 历史 TestStand 报告：逐条实测值，评审/核对限值时引用
+reference_report: "samples/P2546_左后大屏加热_Report[10 59 21][2026 11 3].html"
+dump: reports/P2546_左后大屏加热_dump.json      # tools/seq_dump.py 产出（相对仓库根，reports/ 已 gitignore）
+tests: tests/
+
+notes: |
+  11 项评审闭环清单见 tests/test_heating.py 头部。
+  关键实证：判定语义 EQ（实测 == Limits.Low）；加热请求编码 0=无请求/1=OFF/2~4=档位；
+  库序列"加热X档请求"自带 2s 内部等待 → 用 Stimulus.request_heat()。

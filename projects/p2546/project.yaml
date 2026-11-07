@@ -1,0 +1,23 @@
+# p2546 —— 项目级配置（一个项目 = 一个车型/一套 VeriStand 工程，下含多个 .seq 模块）
+# 目录名规范成合法 Python 包名（P2546 → p2546；未来 C206-10 → c206_10），原名见 name。
+# 台架级配置（Gateway、锁、Allure）在仓库根 config/bench.yaml，本文件的 veristand 段会覆盖它。
+
+id: p2546
+name: P2546
+epic: P2546 HIL 测试
+
+# 覆盖 config/bench.yaml 的 veristand 段（多项目各自指向自己的 .nivssdf）
+veristand:
+  system_definition: "E:/P2546/Veristand项目/p2546.nivssdf"
+  model_target: "Controller"        # 模型所在目标名（ModelManager 参数 API 用）
+
+# 模块清单（= 一个 .seq / 一个被测功能；目录名与左侧一致）
+modules:
+  - id: left_heating
+    name: 左后大屏加热
+    seq_source: "E:/P2546/用例库/第一轮/测试用例/P2546_左后大屏加热.seq"
+
+notes: |
+  项目内跨模块共享：common/channels.py（通道常量与值域）、common/bench.py（台架工况基类）、
+  common/checks.py（EQ 判定断言）。各模型 TongYu_IO，"VlotageControl" 为原模型拼写。
+  待铺开模块：右后大屏加热、左后/右后TBOX远程加热、dtc（.seq 都在 E:/P2546/用例库/第一轮/测试用例/）。

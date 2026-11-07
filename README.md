@@ -50,7 +50,11 @@ F:\TongYuTestScript\python.exe -m venv .venv
 - `helpers/bench_lock.py` —— 台架互斥文件锁（原子创建 + 陈锁自动清理）
 - `helpers/channel.py` —— 通道读写 + 稳态等待 wait_near
 - `config/bench.yaml` —— 唯一的环境配置入口（可被 HIL_BENCH_CONFIG 环境变量覆盖）
-- `tests/` —— `-m hil` 需台架；其余任何机器可跑
+- `tests/` —— 框架级用例（锁、smoke），`-m hil` 需台架；其余任何机器可跑
+- `projects/<项目>/<模块>/` —— 两层结构：项目 = 一个车型/一套 VeriStand 工程（`p2546`，含
+  `project.yaml` 的 veristand 覆盖段 + `common/` 共享通道/工况/判定）；模块 = 一个 `.seq`
+  （`left_heating`：module.yaml + stimulus + tests + samples）。目录名规范成 Python 包名
+  （`C206-10` → `c206_10`），`project.yaml` 的 veristand 段会覆盖 `config/bench.yaml`
 
 ## 台架占用规则（多人 + CI 共存的前提）
 
@@ -63,4 +67,4 @@ F:\TongYuTestScript\python.exe -m venv .venv
 - [x] niveristand 4.0.0 来源确认：公共 pip 源可直接安装（开发机已实证）
 - [ ] 开发机装 VeriStand 2020（与台架同版本）+ 验证远程 Gateway attach
 - [ ] .nivssdf 系统定义是否纳入版本管理（建议 git-lfs 或固定路径+变更记录）
-- [ ] hil 安全确认：reset_channels 写值对被测对象物理安全，才允许跑 -m hil
+- [x] hil 安全确认：欠压/继电器/IGN/FIU 均可写（2026-11-06 已通过）

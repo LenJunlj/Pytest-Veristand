@@ -6,7 +6,7 @@
         跑结构化 dump 才能取出（字符串级挖掘的固有边界）。
 
 用法：
-    python tools/seq_inventory.py samples/P2546_左后大屏加热.seq -o docs/migration_inventory.csv
+    python tools/seq_inventory.py "projects/p2546/left_heating/samples/P2546_左后大屏加热.seq" -o docs/migration_inventory.csv
 """
 import argparse
 import csv

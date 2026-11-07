@@ -7,7 +7,7 @@
 足够产出【初步】迁移清单，但不保证捕获全部结构与执行顺序。
 
 用法：
-    python tools/seq_strings.py samples/xxx.seq [--all]
+    python tools/seq_strings.py projects/p2546/left_heating/samples/xxx.seq [--all]
     默认只显示"关键行"（含 Aliases/Locals/Step/Seq 等关键词），--all 显示全部。
 """
 import argparse

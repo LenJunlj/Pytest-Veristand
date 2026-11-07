@@ -11,7 +11,7 @@
     枚举 StepGroups: StepGroup_Setup=0, StepGroup_Main=1, StepGroup_Cleanup=2
 
 用法：
-    python tools/seq_dump.py samples/P2546_左后大屏加热.seq [-o reports/xxx_dump.json]
+    python tools/seq_dump.py "projects/p2546/left_heating/samples/P2546_左后大屏加热.seq" [-o reports/xxx_dump.json]
 
 注意：TestStand Engine 在解释器退出时析构会挂死 —— 全程 try/finally + os._exit 硬退出。
 """

@@ -1,7 +1,10 @@
 # -*- coding: utf-8 -*-
 """make_report.py —— 把 pytest 的 junit.xml 转成 TestStand 风格的 HTML 报告
 
-模板：samples/P2546_左后大屏加热_Report[10 59 21][2026 11 3].html
+注意：自动生成已在 2026-11-06 按用户要求停用（日常报告只出 Allure）。
+本脚本保留为**手动工具**，需要 TestStand 风格 HTML 时在命令行调用。
+
+模板：projects/p2546/left_heating/samples/P2546_左后大屏加热_Report[10 59 21][2026 11 3].html
 （GBK 编码、charset=gb2312、状态色 Passed=#00FF00 / 序列标题 #00C4C4 / 步骤标题 #FF8000）
 
 用法（台架机）：
