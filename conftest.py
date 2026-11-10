@@ -8,6 +8,7 @@ import os
 import shutil
 import subprocess
 import sys
+from datetime import datetime
 
 import pytest
 import yaml
@@ -31,6 +32,7 @@ os.makedirs(os.path.join(_REPO_ROOT, "reports"), exist_ok=True)
 def pytest_configure(config):
     """把相对路径输出锚定到仓库根（默认相对 cwd，PyCharm 右键运行时会写到 tests\ 下）。
     注意 --junitxml 的 dest 是 xmlpath（pytest 5.x/8.x 相同）。"""
+    config._hil_session_start = datetime.now()   # 报告归档用：版本号/耗时都以会话开始为准
     xml = getattr(config.option, "xmlpath", None)
     if xml and not os.path.isabs(xml):
         config.option.xmlpath = os.path.join(_REPO_ROOT, xml)
@@ -53,6 +55,8 @@ def pytest_configure(config):
 def pytest_addoption(parser):
     parser.addoption("--no-allure", action="store_true", default=False,
                      help="不自动启用 Allure（默认未传 --alluredir 时也会生成）")
+    parser.addoption("--no-report-history", action="store_true", default=False,
+                     help="本次运行不归档到报告历史（不写 reports/report_history）")
 
 
 def _load_allure_cfg():
@@ -295,3 +299,47 @@ def channel(vs, bench_config, model_manager):
     return ChannelHelper(vs, vc.get("channel_prefix", "Aliases/"),
                          model_manager=model_manager,
                          target=vc.get("model_target", "Controller"))
+
+
+@pytest.hookimpl(trylast=True)
+def pytest_sessionfinish(session, exitstatus):
+    """会话结束把本轮报告归档为一个历史版本（v 报告版本管理，见 helpers/report_history.py）。
+
+    **trylast 是必须的**：junitxml 插件在自己的 pytest_sessionfinish 里写 xml
+    （LogXML.pytest_sessionfinish），我们的钩子放到最后才保证拷到的是本轮而非上一轮的文件。
+    归档失败只打印提示，绝不改变退出码（与 Allure 生成钩子同一原则）。
+    """
+    config = session.config
+    try:
+        if config.getoption("--no-report-history"):
+            return
+        alluredir = getattr(config.option, "allure_report_dir", None)
+        if not alluredir:
+            return
+        from helpers import report_history as rh
+
+        roots = sorted(getattr(config, "_hil_project_roots", []) or [])
+        project = os.path.basename(roots[0]) if roots else "framework"
+        xmlpath = getattr(config.option, "xmlpath", None)
+        # 兜底：junit 若是上一轮的旧文件就不拿它算统计，只归档 results
+        if xmlpath and os.path.isfile(xmlpath):
+            start = getattr(config, "_hil_session_start", None)
+            if start and os.path.getmtime(xmlpath) < start.timestamp() - 1:
+                print("[history] junit.xml 比会话还旧，本轮不归档 junit（计数留空）")
+                xmlpath = None
+        try:
+            argv = list(config.invocation_params.args)
+        except Exception:
+            argv = list(sys.argv[1:])
+        meta = rh.archive_session(
+            _REPO_ROOT, project, alluredir, xmlpath,
+            started_at=getattr(config, "_hil_session_start", None),
+            exit_status=int(exitstatus), argv=argv)
+        if meta:
+            c = meta.get("counts") or {}
+            print("[history] 已归档 %s/%s（%s，%s 条，%s）"
+                  % (project, meta["version"],
+                     "调试" if meta["kind"] == "debug" else "全量",
+                     c.get("total", "-"), meta["version"]))
+    except Exception as e:                      # noqa: BLE001
+        print("[history] 归档失败（不影响测试结果）: %s" % e)

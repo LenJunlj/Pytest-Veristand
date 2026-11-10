@@ -38,3 +38,18 @@ report:
     bin: "C:/Tools/allure-2.29.0/bin/allure.bat"   # Allure CLI（Maven Central 下载，需 Java）
     java_home: "C:/Tools/jdk-17.0.2"                # 未设置系统 JAVA_HOME 时用这个
     outdir: "allure-report"                          # 相对仓库根
+
+  # 报告版本管理：每次 pytest 结束把本轮的 allure-results / junit.xml 整份留档。
+  # 不做的话下一轮开始会清空 allure-results、覆盖 allure-report —— 历史是被删除，不只是覆盖。
+  # 留档在 .gitignore 内的 reports/ 下；回看/导出/删除见 docs/报告中心.md
+  history:
+    enabled: true
+    dir: "reports/report_history"   # 相对仓库根
+    keep: 50                        # 每项目保留的全量运行份数（不可再生的历史本体，约 1MB/份）
+    debug_keep: 5                   # 调试运行（带 ::用例 / -k / --lf）单独保留份数，不挤占 keep
+    max_generated: 3                # 每项目最多缓存几份现渲染的 Allure 站点（可再生，删了自动重建）
+
+  # 报告中心页面上的「运行」按钮：后台起 pytest 子进程（任务目录 reports/run_jobs）
+  runner:
+    python: ""        # 留空=自动（pythonw 起的服务会自动换成同目录的 python.exe）
+    keep_jobs: 20     # 保留最近多少个运行任务目录（含日志；含 slow 的一轮可达几十 MB）

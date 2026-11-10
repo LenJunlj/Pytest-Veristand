@@ -86,13 +86,20 @@ def parse_junit(path):
         "total": int(suite.get("tests") or len(cases)),
         "errors": int(suite.get("errors") or 0),
         "failures": int(suite.get("failures") or 0),
-        "skips": int(suite.get("skips") or 0),
+        # pytest(xunit1) 写的是 skipped="N"；历史代码读 "skips"（JUnit 旧拼法）永远得 0，
+        # 导致报告里 Skipped 恒为 0 —— 两个都认，兼容手工/jenkins 产出的 junit
+        "skips": int(suite.get("skips") or suite.get("skipped") or 0),
         "cases": cases,
     }
 
 
-def build_html(suite_name, r, tester, out_path):
+def render_html(suite_name, r, tester, hardware=None):
+    """把 parse_junit 的结果渲染成 HTML 字符串（不落盘，供报告中心导出直接返回）。
+
+    hardware：hdr 表的 Hardware 字段；默认沿用存量 P2546 模板文案，导出时传项目名。
+    """
     now = datetime.datetime.now()
+    hardware = hardware or "P2546 HIL (VeriStand 2020)"
     passed = sum(1 for c in r["cases"] if c["status"] == "Passed")
     failed = sum(1 for c in r["cases"] if c["status"] == "Failed")
     errored = sum(1 for c in r["cases"] if c["status"] == "Error")
@@ -103,7 +110,7 @@ def build_html(suite_name, r, tester, out_path):
     # ---- hdr 表（字段照抄模板） ----
     b.append("<table class='hdr'><tbody>")
     for k, v in (("Software Version", "pytest-Veristand"),
-                 ("Hardware Verison", "P2546 HIL (VeriStand 2020)"),
+                 ("Hardware Verison", hardware),
                  ("Start Time", r["timestamp"] or now.strftime("%Y-%m-%d %H:%M:%S")),
                  ("Executed Time", "%.3f seconds" % r["time"]),
                  ("Tester", tester),
@@ -150,9 +157,13 @@ def build_html(suite_name, r, tester, out_path):
     b.append("<h3>End UUT Report</h3> <hr style=\"color:#0000E0;background-color:#0000E0;"
              "border-width:0;width:90%;height:5px;\"></body></html>")
 
+    return "".join(b)
+
+
+def build_html(suite_name, r, tester, out_path, hardware=None):
     # 模板为 GBK(charset=gb2312)，输出保持一致
     with open(out_path, "w", encoding="gbk", errors="replace") as f:
-        f.write("".join(b))
+        f.write(render_html(suite_name, r, tester, hardware))
 
 
 def default_suite_name(junit_path):
