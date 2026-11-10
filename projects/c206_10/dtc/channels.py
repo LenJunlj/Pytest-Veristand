@@ -23,7 +23,11 @@ CH_CAN_IND_TL = dut("SCCU_1 (582)", "SeatheatInd_TL")
 CH_CAN_IND_TR = dut("SCCU_1 (582)", "SeatheatInd_TR")
 CH_HARD_TL = DAQ["DI0"]
 CH_HARD_TR = DAQ["DI1"]
-CH_FIU3_NTC_TL = bench(FIU["3_CH9"])      # 主驾温度传感器（台架实测 CH9；原文写 CH7 已失效）
+# 主驾温度传感器 NTC。原文 CH7；2026-11-07 全通道扫描曾判"CH7 无反应、CH9→90E211/90E215"
+# 而改 CH9；2026-11-10 台架实跑证据反转（第 2 轮 CH9 下左后 22/23 失败，第 3 轮换 CH7 后通过），
+# 用户按现场接线决定统一回 CH7。⚠ 两通道在不同轮次都有成功/失败记录，疑接触不稳：
+# 复跑 DTC 05/06 若仍不出码，先确认 CH7 是否真的驱动了 DUT，再谈出码时延。
+CH_FIU3_NTC_TL = bench(FIU["3_CH7"])      # 主驾温度传感器（原文 CH7，2026-11-10 回退）
 CH_FIU3_NTC_TR = bench(FIU["3_CH8"])      # 副驾温度传感器
 CH_FIU1_CH1 = bench(FIU1_CH1)
 CH_FIU1_CH10 = bench(FIU1_CH10)
