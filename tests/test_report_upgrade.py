@@ -217,3 +217,19 @@ def test_notify_text_summary():
     assert text.rstrip().endswith("20261110-113000/")
     long = notify.build_text("p", "v", {}, ["x" * 5000])
     assert len(long) <= notify._MAX_CONTENT
+
+
+# ---------------------------------------------------------------- 回归：页面无限刷新
+
+REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+
+def test_dashboard_auto_reload_needs_observed_running():
+    """回归 2026-11-10：任务已结束的页面每次重载都满足"结束且有报告"→ 无限刷新。
+
+    修法是加 sawRunning（本页亲眼看到过运行中才在结束时刷新一次）。这条锁住该条件。
+    """
+    src = open(os.path.join(REPO_ROOT, "tools", "serve_report.py"), encoding="utf-8").read()
+    assert "let sawRunning = false" in src
+    assert "if(running){ sawRunning = true; }" in src
+    assert "job.report_version && sawRunning && !reloaded" in src

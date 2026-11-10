@@ -168,7 +168,8 @@ const CANRUN = %(canrun)s;
 const FINAL = ['passed','failed','error','stopped','interrupted'];
 const KIND = {passed:'通过', failed:'有失败', error:'无法执行', stopped:'已停止',
               interrupted:'中断', running:'运行中', pending:'启动中'};
-let reloaded = false;
+let reloaded = false;          // 本次页面实例内只自动刷新一次
+let sawRunning = false;        // 本页是否亲眼看到过"运行中"——只有真看到过才在结束时刷新
 
 function selRows(){return Array.from(document.querySelectorAll('input.row:checked'));}
 function updCount(){var n=selRows().length;var e=document.getElementById('seln');
@@ -245,6 +246,7 @@ function renderJob(j){
     return;
   }
   const running = FINAL.indexOf(job.status) < 0;
+  if(running){ sawRunning = true; }
   // 任务是全局单槽位：别的项目正在跑要显示（否则用户不知道台架为何被动），
   // 但别的项目已经结束的旧任务与本页无关，直接不显示
   if(job.project !== PROJ && !running){
@@ -276,9 +278,11 @@ function renderJob(j){
                   '<pre id="joblog">加载日志…</pre></div>';
   if(CANRUN){ setRunEnabled(!running); }
   loadLog();
-  if(!running && job.report_version && !reloaded){
+  // 只在"本页看到过运行中 → 现在结束"时刷新一次（新版本落到表格顶部）。
+  // 必须带 sawRunning：任务早已结束的页面若也刷新，每次重载后又满足条件 → 无限刷新。
+  if(!running && job.report_version && sawRunning && !reloaded){
     reloaded = true;
-    setTimeout(function(){ location.reload(); }, 2500);   // 跑完自动刷新，新版本落在表格顶部
+    setTimeout(function(){ location.reload(); }, 2500);
   }
 }
 function setRunEnabled(on){
