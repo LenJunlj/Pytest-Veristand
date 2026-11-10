@@ -219,6 +219,62 @@ def test_notify_text_summary():
     assert len(long) <= notify._MAX_CONTENT
 
 
+# ---------------------------------------------------------------- latest 语义
+
+def test_latest_resolves_to_project_archive_not_repo_root(tmp_path):
+    """回归 2026-11-10：/r/<项目>/latest/ 曾指向仓库根 allure-report（最后一次跑的任何东西）。
+
+    跑过框架单测后，点 C206-10 的「查看最新报告」会看到框架结果。latest 必须=该项目最近归档。
+    这里预置好缓存站点，避免测试真的去调 Java。
+    """
+    repo = _mk_repo(tmp_path)
+    results = _mk_results(tmp_path)
+    rh.archive_session(repo, "demo", results, version="20261110-120000")
+    vd = rh.version_dir(repo, "demo", "20261110-120000")
+    cached = os.path.join(vd, "report")
+    os.makedirs(cached)
+    with open(os.path.join(cached, "index.html"), "w", encoding="utf-8") as f:
+        f.write("demo")
+    root = os.path.join(repo, "allure-report")
+    os.makedirs(root)
+    with open(os.path.join(root, "index.html"), "w", encoding="utf-8") as f:
+        f.write("framework")          # 仓库根留着别的项目的报告
+
+    assert rh.ensure_report(repo, "demo", "latest") == cached
+
+
+def test_latest_falls_back_to_repo_root_without_history(tmp_path):
+    repo = _mk_repo(tmp_path)
+    root = os.path.join(repo, "allure-report")
+    os.makedirs(root)
+    with open(os.path.join(root, "index.html"), "w", encoding="utf-8") as f:
+        f.write("only")
+    assert rh.ensure_report(repo, "demo", "latest") == root
+
+
+def test_latest_report_prefers_full_run_over_debug(tmp_path):
+    """回归 2026-11-10：连跑 5 次单条用例，把"最新报告"挤成了 1 条。
+
+    latest 应取最近一次**全量**；一份全量都没有才退回最新一次任意运行。
+    """
+    repo = _mk_repo(tmp_path)
+    results = _mk_results(tmp_path)
+    rh.archive_session(repo, "demo", results, version="20261110-120000",
+                       argv=["projects/demo"])
+    rh.archive_session(repo, "demo", results, version="20261110-121000",
+                       argv=["projects/demo/tests/test_all.py::test_02_x"])
+    assert rh.resolve_version(repo, "demo", "latest") == "20261110-120000"
+    assert rh.latest_version(repo, "demo")["version"] == "20261110-121000"   # 版本表仍显示最新
+
+
+def test_latest_falls_back_when_only_debug_runs(tmp_path):
+    repo = _mk_repo(tmp_path)
+    results = _mk_results(tmp_path)
+    rh.archive_session(repo, "demo", results, version="20261110-121000",
+                       argv=["projects/demo/tests/test_all.py::test_02_x"])
+    assert rh.resolve_version(repo, "demo", "latest") == "20261110-121000"
+
+
 # ---------------------------------------------------------------- 回归：页面无限刷新
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))

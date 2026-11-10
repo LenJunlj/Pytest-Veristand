@@ -38,6 +38,10 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, unquote, urlsplit
 
 PORT = 8899
+# 访问日志路径（[0] 为 None 表示关闭）。由 main() 按 bench.yaml 的 report.access_log 设定；
+# 关的时候 Handler.log_message 直接 return —— 这就是 pythonw 下"不能写 stderr"的老路子。
+_ACCESS_LOG = [None]
+_ACCESS_LOG_MAX = 4 * 1024 * 1024      # 超过 4MB 截半，避免长期开着撑爆磁盘
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # 计划任务用 pythonw 从系统目录启动，cwd 不是仓库根；helpers/tools 都要能 import
 if REPO_ROOT not in sys.path:
@@ -170,6 +174,7 @@ const KIND = {passed:'通过', failed:'有失败', error:'无法执行', stopped
               interrupted:'中断', running:'运行中', pending:'启动中'};
 let reloaded = false;          // 本次页面实例内只自动刷新一次
 let sawRunning = false;        // 本页是否亲眼看到过"运行中"——只有真看到过才在结束时刷新
+let lastSig = null;            // 上次渲染的运行面板签名：内容没变就不重建 DOM（防闪）
 
 function selRows(){return Array.from(document.querySelectorAll('input.row:checked'));}
 function updCount(){var n=selRows().length;var e=document.getElementById('seln');
@@ -236,12 +241,17 @@ function renderJob(j){
   if(!box) return;
   const job = j.job, bench = j.bench || {};
   if(!job){
-    box.innerHTML = bench.busy
-      ? '<div class="panel-job"><div class="head"><b style="color:#cf222e">台架被占用</b>' +
-        '<span class="hint">pid ' + (bench.holder?bench.holder.pid:'?') + ' / ' +
-        (bench.holder?bench.holder.user:'?') + ' / ' +
-        (bench.holder?bench.holder.time:'?') + '（可能是别人在用，也可能是命令行正在跑）</span></div></div>'
-      : '';
+    // 没有任务时也只渲染一次（台架占用状态变了才重建），否则每 3 秒闪一下
+    const bkey = bench.busy ? 'busy:' + (bench.holder ? bench.holder.pid : '?') : 'idle';
+    if(bkey !== lastSig){
+      box.innerHTML = bench.busy
+        ? '<div class="panel-job"><div class="head"><b style="color:#cf222e">台架被占用</b>' +
+          '<span class="hint">pid ' + (bench.holder?bench.holder.pid:'?') + ' / ' +
+          (bench.holder?bench.holder.user:'?') + ' / ' +
+          (bench.holder?bench.holder.time:'?') + '（可能是别人在用，也可能是命令行正在跑）</span></div></div>'
+        : '';
+      lastSig = bkey;
+    }
     if(CANRUN){ setRunEnabled(true); }
     return;
   }
@@ -250,10 +260,20 @@ function renderJob(j){
   // 任务是全局单槽位：别的项目正在跑要显示（否则用户不知道台架为何被动），
   // 但别的项目已经结束的旧任务与本页无关，直接不显示
   if(job.project !== PROJ && !running){
-    box.innerHTML = '';
+    if(lastSig !== 'none'){
+      box.innerHTML = '';
+      lastSig = 'none';
+    }
     if(CANRUN){ setRunEnabled(true); }
     return;
   }
+  // 已结束的任务内容不会再变：签名相同就直接返回，别每 3 秒重建 DOM 和重拉日志
+  // （否则日志框每 3 秒闪一次、滚动条跳底，看起来就像"页面不断刷新"）
+  const sig = [job.id, job.status, job.exit_code, job.ended_at, job.report_version].join('|');
+  if(!running && sig === lastSig){
+    return;
+  }
+  lastSig = sig;
   const cls = running ? 'running' : (job.status === 'passed' ? 'passed' : 'failed');
   let dur = '';
   if(job.started_at){
@@ -435,8 +455,23 @@ class Handler(BaseHTTPRequestHandler):
     server_version = "HILReportCenter/1.0"
 
     def log_message(self, *args, **kwargs):
-        """pythonw 无窗口运行时 sys.stderr=None，基类逐请求写 stderr 会崩 —— 静默。"""
-        pass
+        """pythonw 无窗口运行时 sys.stderr=None，基类逐请求写 stderr 会崩 → 默认静默。
+
+        排查用（谁在刷、刷多快、命中哪个路径）：bench.yaml 里打开
+        `report.access_log: "reports/report_access.log"`，逐条写文件，pythonw 下也安全。
+        """
+        path = _ACCESS_LOG[0]
+        if not path:
+            return
+        try:
+            # 基类调用形式是 log_message('"%s" %s %s', requestline, code, size)，
+            # 第一个参数是格式串本身，真正的内容在 args[1:]
+            msg = (args[0] % args[1:]) if len(args) > 1 else str(args[0])
+            with open(path, "a", encoding="utf-8") as f:
+                f.write("%s %s %s\n" % (datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3],
+                                        self.client_address[0], msg))
+        except Exception:
+            pass
 
     # ---- 基础输出 ----
     def _send(self, status, body, ctype="text/html; charset=utf-8", headers=None):
@@ -708,9 +743,36 @@ class Handler(BaseHTTPRequestHandler):
             pass
 
 
+def _setup_access_log():
+    """按 report.access_log 配置决定是否写访问日志（排查"页面反复刷新"这类问题用）。"""
+    try:
+        raw = (rh.report_cfg(REPO_ROOT) or {}).get("access_log")
+    except Exception:
+        raw = None
+    if not raw:
+        _ACCESS_LOG[0] = None
+        return None
+    path = raw if isinstance(raw, str) else os.path.join("reports", "report_access.log")
+    if not os.path.isabs(path):
+        path = os.path.join(REPO_ROOT, path)
+    try:
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        if os.path.isfile(path) and os.path.getsize(path) > _ACCESS_LOG_MAX:
+            with open(path, "rb") as f:
+                f.seek(-_ACCESS_LOG_MAX // 2, os.SEEK_END)   # 只留后半段
+                tail = f.read()
+            with open(path, "wb") as f:
+                f.write(tail)
+    except OSError:
+        return None
+    _ACCESS_LOG[0] = path
+    return path
+
+
 def main():
     # 首次部署时先占位，避免根路径 404
     os.makedirs(os.path.join(REPO_ROOT, "allure-report"), exist_ok=True)
+    alog = _setup_access_log()
 
     # 单实例：绑定失败 = 已有服务在跑，安静退出（计划任务重复触发不会起第二份）
     try:
@@ -721,6 +783,8 @@ def main():
 
     log("服务启动 :%d -> 报告中心（历史目录 %s）"
         % (PORT, rh.history_root(REPO_ROOT)))
+    if alog:
+        log("访问日志: %s" % alog)
     print(f"[ok] http://0.0.0.0:{PORT} -> 报告中心")
     for ip in lan_ips():
         print(f"     http://{ip}:{PORT}")

@@ -382,15 +382,29 @@ def latest_version(repo_root, project, cfg=None):
     return vs[0] if vs else None
 
 
+def latest_report_version(repo_root, project, cfg=None):
+    """「最新报告」= 最近一次**全量**运行；一份全量都没有时才退回最近一次任意运行。
+
+    调试运行（argv 带 `::nodeid` / `-k`）通常只有一两条用例，拿它当"最新报告"会让人
+    误以为整批只跑了 1 条（2026-11-10 实测：连跑 5 次单条用例把 latest 挤成了 1 条）。
+    版本表里它们照旧可见（标「调试」），要单独看就点那一行。
+    """
+    vs = list_versions(repo_root, project, cfg)
+    for v in vs:                                  # 已按版本号倒序
+        if v.get("kind") == "full":
+            return v
+    return vs[0] if vs else None
+
+
 def resolve_version(repo_root, project, version, cfg=None):
     """把 "latest" 解析成具体版本号（导出/命名都用它，避免同名文件互相覆盖）。
 
-    导出侧的 latest = **最近一次已归档运行**；页面上的 /r/<项目>/latest/ 仍是仓库根
-    allure-report（零延迟），两者在正常流程下指向同一轮（每轮结束都会归档）。
+    latest = **最近一次全量运行**（见 latest_report_version），与页面上 /r/<项目>/latest/
+    同一语义：调试单跑不会把"最新报告"挤成一条用例。
     """
     if version and version != "latest":
         return version
-    v = latest_version(repo_root, project, cfg)
+    v = latest_report_version(repo_root, project, cfg)
     if not v:
         raise ReportError("项目 %s 还没有历史版本，无法确定 latest（先跑一次或 --import-current）"
                           % project)
@@ -413,18 +427,27 @@ def prune(repo_root, project, cfg=None):
 # ---------------------------------------------------------------- 生成报告
 
 def ensure_report(repo_root, project, version, cfg=None):
-    """确保某版本的 Allure 站点已存在，返回其目录（latest 直接返回仓库根的 allure-report）。
+    """确保某版本的 Allure 站点已存在，返回其目录。
+
+    `latest` = **该项目最近一次归档**（与导出侧 resolve_version 同一语义），不是仓库根的
+    allure-report：后者是"最后一次跑的任何东西"——跑过框架单测后它还留在根目录，
+    点某个项目的「查看最新报告」就会看到别的项目的结果（2026-11-10 实际踩到）。
+    只有该项目一份历史都没有时才退回仓库根，纯粹为了兼容首次部署。
 
     生成是一次性的：首次访问现渲染 3~5 秒，之后直接读缓存；缓存按项目只留
     max_generated 份（超出删最旧），删的只是可再生网页，不动 results/。
     """
-    if version == "latest":
-        d = os.path.join(repo_root, "allure-report")
-        if not os.path.isfile(os.path.join(d, "index.html")):
-            raise ReportError("当前没有最新报告（allure-report/index.html 不存在）")
-        return d
-
     cfg = cfg or load_cfg(repo_root)
+    if version == "latest":
+        v = latest_report_version(repo_root, project, cfg)
+        if v:
+            version = v["version"]
+        else:
+            d = os.path.join(repo_root, "allure-report")
+            if not os.path.isfile(os.path.join(d, "index.html")):
+                raise ReportError("项目 %s 还没有历史版本，仓库根也没有最新报告" % project)
+            return d
+
     vd = version_dir(repo_root, project, version, cfg)
     if not os.path.isdir(vd):
         raise ReportError("版本不存在: %s/%s" % (project, version))
