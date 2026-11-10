@@ -50,7 +50,7 @@ def test_02_enable_8v5(bench):
     """本地使能条件测试_8.5V（dump 序号 2）：原文 Setup/Main/Cleanup 逐步翻译。"""
     # 原文 Setup/Cleanup：本地加热前提条件（fixture 已覆盖）
     bench.set_supply_voltage(8.3)   # 原文：设置程控电源8.5V   # ⚠ 步骤名与写入值不符（名 8.5V / 写 8.3V，以写入为准）
-    time.sleep(10)
+    time.sleep(11)
     bench.request_heat('level3')   # 原文：本地打开加热三档（写档位→0.4s→写0）
     time.sleep(2)
     out = bench.capture()   # 原文：报文硬线采集（读 1 CAN + 7 硬线）
@@ -58,10 +58,10 @@ def test_02_enable_8v5(bench):
     # 原文 8 项判定（EQ：实测 == Limits.Low）
     assert_seat(out, hard=0, can=0, lights=(0, 0, 0, 0, 0, 0))
     time.sleep(2)
-    bench.set_supply_voltage(9.6)   # 原文：设置程控电源9.5V   # ⚠ 步骤名与写入值不符（名 9.5V / 写 9.6V，以写入为准）
+    bench.set_supply_voltage(10)   # 原文：设置程控电源9.5V   # ⚠ 步骤名与写入值不符（名 9.5V / 写 9.6V，以写入为准）
     time.sleep(2)
     out = bench.capture()   # 原文：报文硬线采集（读 1 CAN + 7 硬线）
-    time.sleep(1)
+    time.sleep(2)
     # 原文 8 项判定（EQ：实测 == Limits.Low）
     assert_seat(out, hard=0, can=0, lights=(0, 0, 0, 0, 0, 0))
     bench.request_heat('level3')   # 原文：本地打开加热三档（写档位→0.4s→写0）
