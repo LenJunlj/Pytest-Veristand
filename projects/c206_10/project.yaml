@@ -14,11 +14,17 @@ veristand:
   system_definition: "E:/C206-10项目/Veristand项目/C026-10.nivssdf"
   model_target: "Controller"        # 模型所在目标名(ModelManager 参数 API 用;已验证与新 sdf 一致)
 
-# 模块清单(= 一个 .seq / 一个被测功能);待 dump 存量 .seq 后登记
-modules: []
-#  - id: <模块>
-#    name: <中文名>
-#    seq_source: "<.seq 绝对路径>"
+# 模块清单(= 一个 .seq / 一个被测功能)
+modules:
+  - id: left_rear_heating
+    name: 左后三排加热
+    seq_source: "projects/c206_10/samples/左后三排加热测试用例.seq"
+  - id: right_rear_heating
+    name: 右后三排加热
+    seq_source: "projects/c206_10/samples/右后三排加热测试用例.seq"
+  - id: dtc
+    name: 功能DTC测试
+    seq_source: "projects/c206_10/samples/功能DTC测试.seq"
 
 notes: |
   2026-11-07 sdf 首提取完成(docs/c206_10_registry.csv 443 行):

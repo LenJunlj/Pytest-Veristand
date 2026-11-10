@@ -1,0 +1,32 @@
+# dtc —— 模块级元信息（C206-10 功能 DTC）
+# 路径相对本目录（projects/c206_10/dtc/）
+
+id: dtc
+name: 功能DTC测试
+
+seq: ../samples/功能DTC测试.seq
+dump: reports/c206_dtc_deep.json
+tests: tests/
+
+# 模块激励复位（三级合并最内层）：加热请求/双向故障注入/开关/报文使能/OTA 全清
+reset:
+  'Targets\Controller\Simulation Models\Models\TongYu_IO\Parameters\IO\CAN IO Model\CAN BUS\MDLSoftECUDataToBus\BCM1_11_233_Msg\BCM_TLseatHeatLevelSet\Value': 1.0
+  'Targets\Controller\Simulation Models\Models\TongYu_IO\Parameters\IO\CAN IO Model\CAN BUS\MDLSoftECUDataToBus\BCM1_11_233_Msg\BCM_TRseatHeatLevelSet\Value': 1.0
+  'Targets\Controller\Simulation Models\Models\TongYu_IO\Parameters\IO\FIU\FIU3_OUT_Channel9\Value': 0.0   # 主驾温度（台架实测）
+  'Targets\Controller\Simulation Models\Models\TongYu_IO\Parameters\IO\FIU\FIU3_OUT_Channel7\Value': 0.0   # 原文陈旧通道
+  'Targets\Controller\Simulation Models\Models\TongYu_IO\Parameters\IO\FIU\FIU3_OUT_Channel8\Value': 0.0   # 副驾温度
+  'Targets\Controller\Simulation Models\Models\TongYu_IO\Parameters\IO\FIU\FIU3_OUT_Channel8\Value': 0.0
+  'Targets\Controller\Simulation Models\Models\TongYu_IO\Parameters\IO\FIU\FIU1OUT_Channel1\Value': 0.0
+  'Targets\Controller\Simulation Models\Models\TongYu_IO\Parameters\IO\FIU\FIU1OUT_Channel10\Value': 0.0
+  'Targets\Controller\Simulation Models\Models\TongYu_IO\Parameters\IO\HardLine IO Model\MDLDataToController\MDLSignalRouting\DO0\Value': 0.0
+  'Targets\Controller\Simulation Models\Models\TongYu_IO\Parameters\IO\HardLine IO Model\MDLDataToController\MDLSignalRouting\DO1\Value': 0.0
+  'Targets\Controller\Simulation Models\Models\TongYu_IO\Parameters\IO\CAN IO Model\CAN BUS\MDLSoftECUDataToBus\GW_Config_2B0_Msg\GW_OTAMode\Value': 0.0
+  'Targets\Controller\Simulation Models\Models\TongYu_IO\Parameters\IO\CAN IO Model\CAN BUS\MDLSoftECUDataToBus\EEM_1_2B2_Msg\EEM_PowerLimitSignal\Value': 0.0
+  'Targets\Controller\Simulation Models\Models\TongYu_IO\Parameters\IO\CAN IO Model\CAN BUS\MDLSoftECUDataToBus\BCM1_11_233_Msg_Enable\Switch\Value': 1.0   # 报文使能恢复
+  'Targets\Controller\Simulation Models\Models\TongYu_IO\Parameters\IO\CAN IO Model\CAN BUS\MDLSoftECUDataToBus\BCM1_2_232_Msg_Enable\Switch\Value': 1.0
+  'Targets\Controller\Simulation Models\Models\TongYu_IO\Parameters\IO\CAN IO Model\CAN BUS\MDLSoftECUDataToBus\EEM_1_2B2_Msg_Enable\Switch\Value': 1.0
+
+notes: |
+  诊断走 PCAN-USB（PCAN_USBBUS1, 500k），请求 762 / 响应 76A，PDC 用例清码 765。
+  原文缺陷已标注在 tests/test_all.py 头注（03 两次期望 False、04 只等 1s、09 标签"短地"写 CH1=8）。
+  11/12 开关卡滞按住 55s，已标 pytest.mark.slow。

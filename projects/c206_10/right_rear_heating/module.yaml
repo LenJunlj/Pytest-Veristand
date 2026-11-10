@@ -1,0 +1,23 @@
+# right_rear_heating —— 模块级元信息（C206-10 右后三排加热，一个 .seq 一个模块）
+# 路径相对本目录（projects/c206_10/right_rear_heating/）
+
+id: right_rear_heating
+name: 右后三排加热
+
+seq: ../samples/右后三排加热测试用例.seq
+dump: reports/c206_right_deep.json
+tests: tests/
+
+# 模块激励复位（三级合并最内层；每个用例前后执行）
+reset:
+  'Targets\Controller\Simulation Models\Models\TongYu_IO\Parameters\IO\CAN IO Model\CAN BUS\MDLSoftECUDataToBus\BCM1_11_233_Msg\BCM_TRseatHeatLevelSet\Value': 1.0   # 请求 OFF
+  'Targets\Controller\Simulation Models\Models\TongYu_IO\Parameters\IO\FIU\FIU3_OUT_Channel8\Value': 0.0                                                          # NTC 故障取消（右后用 CH8）
+  'Targets\Controller\Simulation Models\Models\TongYu_IO\Parameters\IO\FIU\FIU1OUT_Channel1\Value': 0.0
+  'Targets\Controller\Simulation Models\Models\TongYu_IO\Parameters\IO\FIU\FIU1OUT_Channel10\Value': 0.0
+  'Targets\Controller\Simulation Models\Models\TongYu_IO\Parameters\IO\HardLine IO Model\MDLDataToController\MDLSignalRouting\DO1\Value': 0.0                     # 右后开关松开（DO1）
+  'Targets\Controller\Simulation Models\Models\TongYu_IO\Parameters\IO\CAN IO Model\CAN BUS\MDLSoftECUDataToBus\GW_Config_2B0_Msg\GW_OTAMode\Value': 0.0
+  'Targets\Controller\Simulation Models\Models\TongYu_IO\Parameters\IO\CAN IO Model\CAN BUS\MDLSoftECUDataToBus\EEM_1_2B2_Msg\EEM_PowerLimitSignal\Value': 0.0
+
+notes: |
+  与左后模块逐项对应，差异照抄原文：TR 请求/状态、DI1 硬线、NTC CH8、开关 DO1、输出开路 CH1=2。
+  判定语义 EQ；请求编码 1=OFF / 2/3/4=一/二/三档 / 0=无请求；本地"打开加热X档"内部等待 0.4s。

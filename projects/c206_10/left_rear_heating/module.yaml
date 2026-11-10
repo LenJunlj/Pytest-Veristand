@@ -1,0 +1,25 @@
+# left_rear_heating —— 模块级元信息（C206-10 左后三排加热，一个 .seq 一个模块）
+# 路径相对本目录（projects/c206_10/left_rear_heating/）
+
+id: left_rear_heating
+name: 左后三排加热
+
+seq: ../samples/左后三排加热测试用例.seq            # 相对本目录
+dump: reports/c206_left_deep.json                  # tools/seq_dump.py 产出（reports/ 已 gitignore）
+tests: tests/
+
+# 模块激励复位（三级合并最内层；每个用例前后执行，防加热请求/故障注入泄漏）
+reset:
+  'Targets\Controller\Simulation Models\Models\TongYu_IO\Parameters\IO\CAN IO Model\CAN BUS\MDLSoftECUDataToBus\BCM1_11_233_Msg\BCM_TLseatHeatLevelSet\Value': 1.0   # 请求 OFF（0=无请求不改变档位，不能当关）
+  'Targets\Controller\Simulation Models\Models\TongYu_IO\Parameters\IO\FIU\FIU3_OUT_Channel9\Value': 0.0   # 主驾 NTC 故障取消（台架实测通道）
+  'Targets\Controller\Simulation Models\Models\TongYu_IO\Parameters\IO\FIU\FIU3_OUT_Channel7\Value': 0.0   # 原文陈旧通道，保留清理防残留
+  'Targets\Controller\Simulation Models\Models\TongYu_IO\Parameters\IO\FIU\FIU1OUT_Channel1\Value': 0.0                                                           # 输出故障取消
+  'Targets\Controller\Simulation Models\Models\TongYu_IO\Parameters\IO\FIU\FIU1OUT_Channel10\Value': 0.0                                                          # 短地配合通道（原文不复位，会泄漏）
+  'Targets\Controller\Simulation Models\Models\TongYu_IO\Parameters\IO\HardLine IO Model\MDLDataToController\MDLSignalRouting\DO0\Value': 0.0                     # 后三排开关松开
+  'Targets\Controller\Simulation Models\Models\TongYu_IO\Parameters\IO\CAN IO Model\CAN BUS\MDLSoftECUDataToBus\GW_Config_2B0_Msg\GW_OTAMode\Value': 0.0          # 非 OTA
+  'Targets\Controller\Simulation Models\Models\TongYu_IO\Parameters\IO\CAN IO Model\CAN BUS\MDLSoftECUDataToBus\EEM_1_2B2_Msg\EEM_PowerLimitSignal\Value': 0.0    # 能量限制复位
+
+notes: |
+  07/08 为耐久用例（1800s / 2696s+600s），已标 pytest.mark.slow，-m "not slow" 可排除。
+  判定语义 EQ（实测 == Limits.Low）；请求编码 1=OFF / 2/3/4=一/二/三档 / 0=无请求。
+  本地序列"本地打开加热X档"内部等待 0.4s（写档位→0.4s→写 0），见 common/seat_heating.py。
