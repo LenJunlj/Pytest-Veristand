@@ -219,6 +219,19 @@ def test_notify_text_summary():
     assert len(long) <= notify._MAX_CONTENT
 
 
+# ---------------------------------------------------------------- 回归：ini 必须纯 ASCII
+
+def test_pytest_ini_is_pure_ascii():
+    """回归 2026-11-10：pytest 5.4.3 解析 pytest.ini 用系统编码（本机 cp936）。
+
+    往里写中文会让**没有 PYTHONUTF8 的环境**（报告中心 pythonw 拉起的子进程）在启动时
+    UnicodeDecodeError → exit 1，页面上就是"点运行没反应/立刻失败"。开发 shell 里因
+    PYTHONUTF8=1 看不出来，所以用这条锁住。
+    """
+    with open(os.path.join(REPO_ROOT, "pytest.ini"), "rb") as f:
+        f.read().decode("ascii")            # 非 ASCII 直接抛异常
+
+
 # ---------------------------------------------------------------- latest 语义
 
 def test_latest_resolves_to_project_archive_not_repo_root(tmp_path):
