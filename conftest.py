@@ -90,8 +90,34 @@ def pytest_terminal_summary(terminalreporter, exitstatus, config):
     _generate_allure_report(terminalreporter, config)
 
 
+def _session_project(config):
+    """本次会话的报告桶名：projects/<id> 的目录名；框架级用例（tests/）记 framework。"""
+    roots = sorted(getattr(config, "_hil_project_roots", []) or [])
+    return os.path.basename(roots[0]) if roots else "framework"
+
+
+def _locate_roots(fspath):
+    """从用例文件向上找最近的 project.yaml / module.yaml 所在目录；都没有返回 (None, None)。"""
+    import pathlib
+    proj = mod = None
+    for anc in pathlib.Path(str(fspath)).parents:
+        if mod is None and (anc / "module.yaml").is_file():
+            mod = str(anc)
+        if proj is None and (anc / "project.yaml").is_file():
+            proj = str(anc)
+        if proj and mod:
+            break
+    return proj, mod
+
+
 def _generate_allure_report(terminalreporter, config):
-    """仅当本次传了 --alluredir 时，会话结束自动执行 allure generate（配置见 bench.yaml report.allure）。"""
+    """仅当本次传了 --alluredir 时，会话结束自动执行 allure generate（配置见 bench.yaml report.allure）。
+
+    生成前做三件事（顺序有意义）：
+      1. 写 categories/environment/executor 元数据 —— executor 里的版本号必须与归档一致；
+      2. 把跨轮趋势账本灌进 results/history —— Allure 2 只认这个位置；
+      3. 生成本轮站点，再把新 history 收回账本 —— 账本只在这里写，保证"上一轮"定义唯一。
+    """
     alluredir = getattr(config.option, "allure_report_dir", None)
     if not alluredir:
         return
@@ -114,6 +140,24 @@ def _generate_allure_report(terminalreporter, config):
         terminalreporter.write_line("[allure] 未找到 Java（设置 JAVA_HOME 或 bench.yaml report.allure.java_home）")
         return
 
+    project = _session_project(config)
+    version = datetime.now().strftime("%Y%m%d-%H%M%S")
+    config._hil_report_version = version      # sessionfinish 归档时沿用，保证 executor 链接不指向空版本
+    try:
+        from helpers import report_meta
+        report_meta.write_results_meta(_REPO_ROOT, alluredir, project, version,
+                                       extra={"RunVersion": version})
+        terminalreporter.write_line("[report] 元数据已写: categories / environment / executor")
+    except Exception as e:                    # noqa: BLE001
+        terminalreporter.write_line("[report] 元数据写入失败（不影响测试结果）: %s" % e)
+
+    from helpers import report_history as rh
+    try:
+        n = rh.seed_history(_REPO_ROOT, project, alluredir)
+        terminalreporter.write_line("[report] 趋势账本: 灌入 %d 个历史文件（0=首轮，Trends 从这轮起步）" % n)
+    except Exception as e:                    # noqa: BLE001
+        terminalreporter.write_line("[report] 趋势账本灌入失败（趋势页会缺数据）: %s" % e)
+
     env = dict(os.environ)
     env["JAVA_HOME"] = java_home
     try:
@@ -126,6 +170,11 @@ def _generate_allure_report(terminalreporter, config):
                 inject(outdir)
             except Exception:
                 pass
+            try:
+                m = rh.harvest_history(_REPO_ROOT, project, outdir)
+                terminalreporter.write_line("[report] 趋势账本已更新 %d 个文件（Trends/History/Retries 生效）" % m)
+            except Exception as e:               # noqa: BLE001
+                terminalreporter.write_line("[report] 趋势账本收取失败（下一轮趋势会断）: %s" % e)
             terminalreporter.write_line("[allure] 报告: %s" % os.path.join(outdir, "index.html"))
         else:
             terminalreporter.write_line(
@@ -182,22 +231,41 @@ def pytest_collection_finish(session):
     判定规则：从每个用例文件向上分别找最近的 project.yaml / module.yaml，
     其所在目录即项目根 / 模块根。框架级用例（tests/ 下）两者都没有，不参与。
     """
-    import pathlib
     roots, mods = set(), set()
     for item in session.items:
-        p = pathlib.Path(str(item.fspath))
-        proj_found = mod_found = False
-        for anc in p.parents:
-            if not mod_found and (anc / "module.yaml").is_file():
-                mods.add(str(anc))
-                mod_found = True
-            if not proj_found and (anc / "project.yaml").is_file():
-                roots.add(str(anc))
-                proj_found = True
-            if proj_found and mod_found:
-                break
+        proj, mod = _locate_roots(item.fspath)
+        if proj:
+            roots.add(proj)
+        if mod:
+            mods.add(mod)
     session.config._hil_project_roots = sorted(roots)
     session.config._hil_module_roots = sorted(mods)
+
+
+def pytest_collection_modifyitems(session, config, items):
+    """给项目用例自动挂 dump 序号标签（v3 §4 追溯外键），用例文件零改动。
+
+    编号本来就在函数名里（test_22_exit_ntc_open → 22），这里只解析并挂 allure 标签：
+        testcase = c206_10#22   （报告里是用例编号，可与 .seq / 台账 / Excel 三方对照）
+        tag      = seq:22       （报告里可点选筛出这一条）
+        tag      = module:dtc
+    框架级用例（tests/，没有 project.yaml）不挂。
+    """
+    from helpers.case_ids import parse_seq, case_labels
+    cache = {}
+    for item in items:
+        seq = parse_seq(item.name)
+        if seq is None:
+            continue
+        key = str(item.fspath)
+        if key not in cache:
+            cache[key] = _locate_roots(item.fspath)
+        proj, mod = cache[key]
+        if not proj:
+            continue
+        module = os.path.basename(mod) if mod else None
+        for label_type, value in case_labels(os.path.basename(proj), seq, module):
+            item.add_marker(pytest.mark.allure_label(value, label_type=label_type))
 
 
 @pytest.fixture(scope="session")
@@ -318,8 +386,7 @@ def pytest_sessionfinish(session, exitstatus):
             return
         from helpers import report_history as rh
 
-        roots = sorted(getattr(config, "_hil_project_roots", []) or [])
-        project = os.path.basename(roots[0]) if roots else "framework"
+        project = _session_project(config)
         xmlpath = getattr(config.option, "xmlpath", None)
         # 兜底：junit 若是上一轮的旧文件就不拿它算统计，只归档 results
         if xmlpath and os.path.isfile(xmlpath):
@@ -334,12 +401,49 @@ def pytest_sessionfinish(session, exitstatus):
         meta = rh.archive_session(
             _REPO_ROOT, project, alluredir, xmlpath,
             started_at=getattr(config, "_hil_session_start", None),
-            exit_status=int(exitstatus), argv=argv)
+            exit_status=int(exitstatus), argv=argv,
+            # 与 executor.json 的 Build 链接用同一个版本号（生成阶段已算好）
+            version=getattr(config, "_hil_report_version", None))
         if meta:
             c = meta.get("counts") or {}
             print("[history] 已归档 %s/%s（%s，%s 条，%s）"
                   % (project, meta["version"],
                      "调试" if meta["kind"] == "debug" else "全量",
                      c.get("total", "-"), meta["version"]))
+            _notify_finished(project, meta, xmlpath)
     except Exception as e:                      # noqa: BLE001
         print("[history] 归档失败（不影响测试结果）: %s" % e)
+
+
+def _notify_finished(project, meta, xmlpath):
+    """归档后推一条群消息（默认关闭；见 helpers/notify.py 与 bench.yaml report.notify）。
+
+    放在归档之后、独立 try 里：没有 webhook、网络不通、群机器人限流都只是打印一行，
+    绝不影响退出码——否则"通知失败"会盖掉真正的测试结论。
+    """
+    try:
+        from helpers import notify
+        from helpers import report_history as rh
+        ncfg = (rh.report_cfg(_REPO_ROOT) or {}).get("notify") or {}
+        if not ncfg.get("enabled"):
+            return
+        failed = []
+        if xmlpath and os.path.isfile(xmlpath):
+            try:
+                from tools.make_report import parse_junit
+                failed = [c["name"] for c in parse_junit(xmlpath)["cases"]
+                          if c["status"] in ("Failed", "Error")]
+            except Exception:
+                failed = []
+        c = meta.get("counts") or {}
+        status = "failed" if (c.get("failed") or c.get("error")) else "passed"
+        url = ""
+        if rh.public_url(_REPO_ROOT):
+            url = "%s/r/%s/%s/" % (rh.public_url(_REPO_ROOT), project, meta["version"])
+        text = notify.build_text(project, meta["version"], c, failed, url,
+                                 duration_s=c.get("duration_s"), status=status)
+        r = notify.send(ncfg, text)
+        print("[notify] %s" % ("已推送" if r.get("sent")
+                               else "未推送: %s" % r.get("reason")))
+    except Exception as e:                      # noqa: BLE001
+        print("[notify] 发送失败（不影响测试结果）: %s" % e)

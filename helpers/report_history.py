@@ -93,6 +93,27 @@ def _allure_cfg(repo_root):
         return {}
 
 
+def report_cfg(repo_root):
+    """读 bench.yaml 的 report 段（public_url / notify 等跨功能配置）。
+
+    与 load_cfg 的区别：load_cfg 只取 report.history（归档行为），这里取整个 report。
+    """
+    try:
+        with open(os.path.join(repo_root, "config", "bench.yaml"), "r", encoding="utf-8") as f:
+            return (yaml.safe_load(f) or {}).get("report", {}) or {}
+    except Exception:
+        return {}
+
+
+def public_url(repo_root):
+    """报告中心的局域网入口（末尾不带斜杠）；未配置时返回空串。
+
+    用在 executor.json 的 Build 链接和通知消息里 —— 报告里的链接必须指回**这台机器**，
+    不能写成 localhost（别人点开就是自己的机器）。
+    """
+    return str((report_cfg(repo_root) or {}).get("public_url") or "").rstrip("/")
+
+
 def history_root(repo_root, cfg=None):
     cfg = cfg or load_cfg(repo_root)
     d = cfg.get("dir") or DEFAULT_CFG["dir"]
@@ -157,6 +178,63 @@ def version_dir(repo_root, project, version, cfg=None):
     return os.path.join(history_root(repo_root, cfg), project, version)
 
 
+# ---------------------------------------------------------------- 跨轮趋势账本
+# Allure 2 的趋势不是服务端存的，而是靠**上一份报告的 history/ 目录**续上：
+# generate 时若 results/history 存在，就把 history-trend / retries-trend 等并进去，
+# 新报告的 Trends / History / Retries 三页才有数据。
+#
+# 我们的链：本轮 results ←(灌)← 账本 ←(收)← 本轮 report/history
+# 账本放在 <报告历史根>/<项目>/_history（下划线前缀，_VER_RE 不会把它当版本）。
+
+def history_ledger(repo_root, project, cfg=None):
+    return os.path.join(history_root(repo_root, cfg), project, "_history")
+
+
+def seed_history(repo_root, project, results_dir, cfg=None):
+    """把账本灌进本轮 results/history。返回复制的文件数（0 = 首轮，没有可续的历史）。"""
+    led = history_ledger(repo_root, project, cfg)
+    if not os.path.isdir(led):
+        return 0
+    dst = os.path.join(results_dir, "history")
+    os.makedirs(dst, exist_ok=True)
+    n = 0
+    for name in os.listdir(led):
+        src = os.path.join(led, name)
+        if not os.path.isfile(src):
+            continue
+        try:
+            shutil.copy2(src, os.path.join(dst, name))
+            n += 1
+        except OSError:
+            pass
+    return n
+
+
+def harvest_history(repo_root, project, report_dir, cfg=None):
+    """把 generate 出来的 report/history 收回账本（账本唯一写入口）。返回文件数。"""
+    src = os.path.join(report_dir, "history")
+    if not os.path.isdir(src):
+        return 0
+    led = history_ledger(repo_root, project, cfg)
+    os.makedirs(led, exist_ok=True)
+    n = 0
+    for name in os.listdir(src):
+        p = os.path.join(src, name)
+        if not os.path.isfile(p):
+            continue
+        try:
+            shutil.copy2(p, os.path.join(led, name))
+            n += 1
+        except OSError:
+            pass
+    return n
+
+
+def sync_history_into(repo_root, project, results_dir, cfg=None):
+    """把账本同步进某个 results 副本（归档版本用，让该版本单独渲染时也带趋势）。"""
+    return seed_history(repo_root, project, results_dir, cfg)
+
+
 def dir_size(path):
     total = 0
     for dp, _dns, fns in os.walk(path):
@@ -197,8 +275,11 @@ def _git_head(repo_root):
 
 def archive_session(repo_root, project, results_dir, junit_path=None,
                     started_at=None, exit_status=0, argv=None, cfg=None,
-                    now=None, extra=None):
+                    now=None, extra=None, version=None):
     """把一次运行的 allure-results / junit.xml / meta 归档成一个版本。
+
+    version：报告生成阶段算好的版本号（executor.json 的 Build 链接要指到它），
+    不传则按 now 现算 —— 两边必须一致，否则报告里的链接会指向不存在的版本。
 
     返回 meta dict；不需要归档（未启用、看不到结果、已被 --no-allure 关掉）时返回 None。
     归档失败抛异常（由调用方决定是否吞掉——conftest 里是吞掉，绝不影响用例结果）。
@@ -211,7 +292,7 @@ def archive_session(repo_root, project, results_dir, junit_path=None,
         return None
 
     now = now or datetime.now()
-    version = _version_stamp(now)
+    version = version or _version_stamp(now)
     dest = version_dir(repo_root, project, version, cfg)
     if os.path.exists(dest):                     # 同一秒跑两次：追加序号，绝不覆盖
         i = 2
@@ -223,6 +304,8 @@ def archive_session(repo_root, project, results_dir, junit_path=None,
     # results 是唯一事实源：整份拷走，之后 junit 覆盖/清空都与它无关
     shutil.copytree(results_dir, os.path.join(dest, "results"),
                     ignore=shutil.ignore_patterns("__pycache__"))
+    # 把趋势账本也带进归档副本：单独渲染这个版本时 Trends 页同样有数
+    sync_history_into(repo_root, project, os.path.join(dest, "results"), cfg)
 
     counts = None
     junit_copied = False
@@ -459,6 +542,66 @@ def build_zip(repo_root, project, version, cfg=None):
         z.writestr("%s/%s" % (name, "启动查看.bat"), _LAUNCH_BAT.replace("\n", "\r\n").encode("gbk", "replace"))
         z.writestr("%s/%s" % (name, "说明.txt"), _README_TXT.replace("\n", "\r\n").encode("gbk", "replace"))
     return zip_path, name + ".zip"
+
+
+def _allure_tool(repo_root):
+    """返回 (allure 命令行前缀, JAVA_HOME)；缺 CLI 或 Java 时抛 ReportError。"""
+    acfg = _allure_cfg(repo_root)
+    allure_bin = acfg.get("bin") or shutil.which("allure")
+    if not allure_bin or not os.path.exists(allure_bin):
+        raise ReportError("未找到 allure CLI（配置 config/bench.yaml report.allure.bin）")
+    java_home = os.environ.get("JAVA_HOME") or acfg.get("java_home")
+    if not java_home or not os.path.isdir(java_home):
+        raise ReportError("未找到 Java（设置 JAVA_HOME 或 bench.yaml report.allure.java_home）")
+    cmd = [allure_bin] if sys.platform != "win32" else ["cmd", "/c", allure_bin]
+    return cmd, java_home
+
+
+def build_single_file(repo_root, project, version, cfg=None):
+    """导出 Allure **官方单文件报告**（自包含 index.html，双击即开、不需要任何本地服务）。
+
+    `--single-file` 是 Allure 2.24+ 的功能（本机 2.29.0 已支持），取代了原先
+    「打包 ZIP + 启动查看.bat 起 http.server」的绕行方案。
+    两个已知边界：
+      1) 单文件模式**不产出 history/**（Allure2 官方限制，allure2#2740），所以趋势页要在
+         多文件站点（/r/<项目>/<版本>/）看；导出件里是否带趋势取决于生成前的账本灌入。
+      2) 附件都内联进 HTML，体量随附件增长 —— 只有日志/截图类的运行才明显变大。
+    做法：把归档的 results 复制到临时目录 → 灌入趋势账本 → 生成 → 读回 index.html。
+    临时目录用完即删，绝不写归档本体。
+    """
+    cfg = cfg or load_cfg(repo_root)
+    version = resolve_version(repo_root, project, version, cfg)
+    vd = version_dir(repo_root, project, version, cfg)
+    src = os.path.join(vd, "results")
+    if not os.path.isdir(src):
+        raise ReportError("该版本没有归档 results，无法导出单文件报告: %s/%s" % (project, version))
+    cmd_prefix, java_home = _allure_tool(repo_root)
+
+    tmp = tempfile.mkdtemp(prefix="hilsingle_")
+    try:
+        work = os.path.join(tmp, "results")
+        shutil.copytree(src, work, ignore=shutil.ignore_patterns("__pycache__"))
+        seed_history(repo_root, project, work, cfg)
+        out = os.path.join(tmp, "out")
+        env = dict(os.environ)
+        env["JAVA_HOME"] = java_home
+        r = subprocess.run(cmd_prefix + ["generate", work, "-o", out, "--clean", "--single-file"],
+                           env=env, capture_output=True, text=True, timeout=300)
+        if r.returncode != 0:
+            raise ReportError("allure --single-file 失败: %s"
+                              % ((r.stderr or r.stdout or "")[-300:]))
+        idx = os.path.join(out, "index.html")
+        if not os.path.isfile(idx):
+            raise ReportError("allure --single-file 未产出 index.html")
+        try:                                          # 中文界面；改的就是 index.html，需重读
+            from tools.allure_i18n import inject
+            inject(out)
+        except Exception:
+            pass
+        with open(idx, "rb") as f:
+            return f.read(), "%s_%s.html" % (project, version)
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
 
 
 def build_html(repo_root, project, version, cfg=None):

@@ -53,3 +53,15 @@ report:
   runner:
     python: ""        # 留空=自动（pythonw 起的服务会自动换成同目录的 python.exe）
     keep_jobs: 20     # 保留最近多少个运行任务目录（含日志；含 slow 的一轮可达几十 MB）
+
+  # 报告中心对局域网的入口（末尾不带斜杠）。写进 executor.json 的 Build 链接与群通知里：
+  # 报告离开这台机器后别人点开也能回到这个版本 —— 千万别写 localhost（那是对方自己的机器）。
+  public_url: "http://10.10.3.88:8899"
+
+  # 跑完推群（企业微信/钉钉机器人）。默认关闭：没填 webhook 不会发任何请求。
+  # 通知失败只打印一行，绝不影响测试结果与退出码。
+  notify:
+    enabled: false
+    kind: wecom          # wecom=企业微信 / dingtalk=钉钉 / json=自定义 webhook
+    webhook: ""          # 群机器人地址（含 key），属台架本地配置，别提交
+    mention_all: false   # 钉钉是否 @所有人

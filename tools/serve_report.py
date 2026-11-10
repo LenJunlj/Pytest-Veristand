@@ -9,7 +9,10 @@
     GET  /r/<project>/<version>/...       → 服务某个归档版本（首次访问用 allure CLI 现生成）
     GET  /api/projects                    → 项目清单
     GET  /api/versions?project=<id>       → 版本清单（含 counts/kind/大小）
-    GET  /api/export?project=&version=&format=zip|html   → 下载导出件
+    GET  /api/export?project=&version=&format=single|html|zip   → 下载导出件
+                          single=Allure 单文件报告（双击即开，推荐）
+                          html  =TestStand 风格单文件（GBK，可打印）
+                          zip   =Allure 站点压缩包（旧方案，需起本地服务才能看）
     POST /api/delete                      → 删除版本（body: {project, versions|kind|all}）
 
 设计要点（改动前请先读）：
@@ -332,7 +335,7 @@ def _render_dashboard(project, projects, versions):
                 '<td class="num">%s</td><td class="num">%s</td><td class="num">%s</td>'
                 '<td class="num">%s</td><td>%s</td><td>%s</td>'
                 '<td><a class="act" href="/r/%s/%s/" target="_blank">查看</a>'
-                '<a class="act" href="/api/export?project=%s&version=%s&format=zip">导出ZIP</a>'
+                '<a class="act" href="/api/export?project=%s&version=%s&format=single">导出报告</a>'
                 '<a class="act" href="/api/export?project=%s&version=%s&format=html">导出HTML</a>'
                 '<a class="act warn" href="#" onclick="delOne(\'%s\');return false;">删除</a></td>'
                 '</tr>' % (
@@ -546,6 +549,7 @@ class Handler(BaseHTTPRequestHandler):
                      "exit_status", "counts", "argv", "git_head", "host", "user")}
             item["bytes"] = _ver_size(v)
             item["url"] = "/r/%s/%s/" % (project, v["version"])
+            item["single"] = "/api/export?project=%s&version=%s&format=single" % (project, v["version"])
             item["zip"] = "/api/export?project=%s&version=%s&format=zip" % (project, v["version"])
             item["html"] = "/api/export?project=%s&version=%s&format=html" % (project, v["version"])
             vs.append(item)
@@ -554,14 +558,20 @@ class Handler(BaseHTTPRequestHandler):
     def _api_export(self, qs):
         project = (qs.get("project") or [None])[0]
         version = (qs.get("version") or ["latest"])[0]
-        fmt = ((qs.get("format") or ["zip"])[0] or "zip").lower()
+        fmt = ((qs.get("format") or ["single"])[0] or "single").lower()
         if not valid_project(project):
             return self._fail(400, "project 参数缺失或非法")
         if not valid_version(version):
             return self._fail(400, "version 参数非法")
-        if fmt not in ("zip", "html"):
-            return self._fail(400, "format 只支持 zip / html")
+        if fmt not in ("zip", "html", "single"):
+            return self._fail(400, "format 只支持 single / html / zip")
         try:
+            if fmt == "single":
+                # Allure 官方单文件报告：一个 HTML 双击即开，不需要 bat / 本地服务
+                data, name = rh.build_single_file(REPO_ROOT, project, version)
+                log("导出单文件 %s/%s -> %s (%d B)" % (project, version, name, len(data)))
+                return self._send(200, data, "text/html; charset=utf-8",
+                                  {"Content-Disposition": 'attachment; filename="%s"' % name})
             if fmt == "html":
                 data = rh.build_html(REPO_ROOT, project, version)
                 name = "%s_%s.html" % (project, version)

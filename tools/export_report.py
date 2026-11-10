@@ -8,9 +8,10 @@
   # 看有哪些版本
   F:\\TongYuTestScript\\python.exe tools\\export_report.py --list --project c206_10
 
-  # 导出（默认 ZIP 交互包；--format html 出单文件 HTML）
-  F:\\TongYuTestScript\\python.exe tools\\export_report.py --project c206_10 --version latest --format zip
-  F:\\TongYuTestScript\\python.exe tools\\export_report.py --project c206_10 --version 20261109-180703 --format html -o D:\\报告
+  # 导出（默认 single=Allure 单文件，双击即开；html=TestStand 风格；zip=旧交互包）
+  F:\\TongYuTestScript\\python.exe tools\\export_report.py --project c206_10 --version latest
+  F:\\TongYuTestScript\\python.exe tools\\export_report.py --project c206_10 --version latest --format html
+  F:\\TongYuTestScript\\python.exe tools\\export_report.py --project c206_10 --version 20261109-180703 -o D:\\报告
 
   # 删除（不加 --yes 只做 dry-run，打印将删什么、能腾多少）
   F:\\TongYuTestScript\\python.exe tools\\export_report.py --delete --project c206_10 --kind debug
@@ -65,19 +66,25 @@ def cmd_export(args):
     outdir = args.outdir or os.path.join(REPO_ROOT, "reports", "exports")
     os.makedirs(outdir, exist_ok=True)
     ver = rh.resolve_version(REPO_ROOT, args.project, args.version)
-    if args.format == "html":
+    if args.format == "single":
+        data, name = rh.build_single_file(REPO_ROOT, args.project, ver)
+        path = os.path.join(outdir, name)
+        with open(path, "wb") as f:
+            f.write(data)
+        print("已导出 Allure 单文件报告: %s（%s，双击即开）" % (path, _fmt_bytes(len(data))))
+    elif args.format == "html":
         data = rh.build_html(REPO_ROOT, args.project, ver)
         name = "%s_%s.html" % (args.project, ver)
         path = os.path.join(outdir, name)
         with open(path, "wb") as f:
             f.write(data)
-        print("已导出单文件 HTML: %s（%s）" % (path, _fmt_bytes(len(data))))
+        print("已导出单文件 HTML: %s（%s，TestStand 风格，可打印）" % (path, _fmt_bytes(len(data))))
     else:
         tmp, name = rh.build_zip(REPO_ROOT, args.project, ver)
         path = os.path.join(outdir, name)
         shutil.move(tmp, path)
         print("已导出 ZIP 交互包: %s（%s）" % (path, _fmt_bytes(os.path.getsize(path))))
-        print("  接收方解压后双击「启动查看.bat」即可（不能直接双击 report/index.html）")
+        print("  旧方案：接收方解压后双击「启动查看.bat」才能看（不能直接双击 report/index.html）")
     return 0
 
 
@@ -119,8 +126,9 @@ def main():
     ap.add_argument("--list", action="store_true", help="列出版本")
     ap.add_argument("--version", default="latest",
                     help="版本号 20261109-180703 / latest；删除时可逗号分隔多个")
-    ap.add_argument("--format", choices=("zip", "html"), default="zip",
-                    help="zip=Allure 交互包(需本地服务打开) / html=单文件 HTML(双击即开)")
+    ap.add_argument("--format", choices=("single", "html", "zip"), default="single",
+                    help="single=Allure 单文件(默认,双击即开) / html=TestStand 风格(可打印) / "
+                         "zip=旧交互包(需起本地服务)")
     ap.add_argument("-o", "--outdir", default=None,
                     help="导出目录（默认 reports/exports）")
     ap.add_argument("--delete", action="store_true", help="删除版本")
